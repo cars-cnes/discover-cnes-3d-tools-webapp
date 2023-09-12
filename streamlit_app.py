@@ -67,7 +67,8 @@ if st.button("Download demo"):
 if st.button("Clean data directory"):
     for filename in [image1, geomodel1,
                      image2, geomodel2]:
-        os.remove(filename)
+        if os.path.exists(filename):
+            os.remove(filename)
 
 # map
 def draw_envelope(image, geomodel, color, m=None):
