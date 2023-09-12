@@ -64,6 +64,11 @@ if st.button("Download demo"):
     os.rmdir("data_gizeh_small")
     os.remove("data_gizeh_small.tar.bz2")
 
+if st.button("Clean data directory"):
+    for filename in [image1, geomodel1,
+                     image2, geomodel2]:
+        os.remove(filename)
+
 # map
 def draw_envelope(image, geomodel, color, m=None):
     if os.path.exists(image) and os.path.exists(geomodel):
