@@ -36,7 +36,7 @@ def upload_and_save(name, filename):
     uploaded = st.file_uploader(name)
     if uploaded is not None:
         with open(uploaded.name, "wb") as f:
-            f.write(image.getbuffer())
+            f.write(uploaded.getbuffer())
             os.rename(uploaded.name, filename)
 
 left, right = st.columns((1, 1))
