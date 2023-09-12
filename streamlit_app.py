@@ -7,6 +7,8 @@ from shareloc.image import Image
 from shareloc.geofunctions import localization
 import folium
 from streamlit_folium import st_folium
+import tarfile
+import requests
 
 MINI_LOGO ="https://raw.githubusercontent.com/CNES/cars/master/docs/source/images/picto_transparent_mini.png"
 st.set_page_config(page_title="cars-webapp",
@@ -23,26 +25,43 @@ st.markdown(("# CARS, a satellite multi view stereo framework"))
 st.markdown(("## inputs"))
 
 st.markdown(("### sensors"))
+
+def upload_and_save(name):
+    uploaded = st.file_uploader(name)
+    if uploaded is not None:
+        with open(uploaded.name, "wb") as f:
+            f.write(image.getbuffer())
+            return uploaded.name
+    else:
+        return None
+
 left, right = st.columns((1, 1))
 with left:
-    image1 = st.file_uploader("Image 1")
-    geomodel1 = st.file_uploader("Geomodel 1")
+    image1 = upload_and_save("Image 1")
+    geomodel1= upload_and_save("Geomodel 1")
 with right:
-    image2 = st.file_uploader("Image 2")
-    geomodel2 = st.file_uploader("Geomodel 2")
+    image2 = upload_and_save("Image 2")
+    geomodel2 = upload_and_save("Geomodel 2")
+
+# download demo
+if st.button("Download demo"):
+    r = requests.get("https://github.com/CNES/cars/raw/master/tutorials/data_gizeh_small.tar.bz2")
+    image1 = "data_gizeh_small/img1.tif"
+    geomodel1 = "data_gizeh_small/img1.geom"
+    image2 = "data_gizeh_small/img2.tif"
+    geomodel2 = "data_gizeh_small/img2.geom"
+
+    open("data_gizeh_small.tar.bz2", "wb").write(r.content)
+    with tarfile.open("data_gizeh_small.tar.bz2", "r") as tf:
+        for filename in [image1, geomodel1, image2, geomodel2]:
+          tf.extract(filename)
 
 # map
 def draw_envelope(image, geomodel, color, m=None):
     if image is not None and geomodel is not None:
-        # read / write geomodel
-        with open(image.name, "wb") as f:
-            f.write(image.getbuffer())
-        with open(geomodel.name, "wb") as f:
-            f.write(geomodel.getbuffer())
-
         # read image
-        shareloc_img = Image(image.name)
-        shareloc_mdl = RPC.from_any(geomodel.name)
+        shareloc_img = Image(image)
+        shareloc_mdl = RPC.from_any(geomodel)
 
         loc = localization.Localization(
             shareloc_mdl,
@@ -59,12 +78,12 @@ def draw_envelope(image, geomodel, color, m=None):
         if m is None:
             m = folium.Map(location=envelope[0, :2][::-1], zoom_start=16)
 
-        fg = folium.FeatureGroup(name=image.name, show=True)
+        fg = folium.FeatureGroup(name=image, show=True)
         m.add_child(fg)
         folium.Polygon(envelope[:, :2][:, [1, 0]],
                        color=color,
                        fill_color=color,
-                       tooltip=image.name).add_to(fg)
+                       tooltip=image).add_to(fg)
 
     return m
 
