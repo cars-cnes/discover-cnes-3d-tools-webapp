@@ -26,39 +26,46 @@ st.markdown(("## inputs"))
 
 st.markdown(("### sensors"))
 
-def upload_and_save(name):
+image1 = "data/image1.tif"
+image2 = "data/image2.tif"
+geomodel1 = "data/image1.geom"
+geomodel2 = "data/image2.geom"
+
+def upload_and_save(name, filename):
     uploaded = st.file_uploader(name)
     if uploaded is not None:
         with open(uploaded.name, "wb") as f:
             f.write(image.getbuffer())
-            return uploaded.name
-    else:
-        return None
+            os.rename(uploaded.name, filename)
 
 left, right = st.columns((1, 1))
 with left:
-    image1 = upload_and_save("Image 1")
-    geomodel1= upload_and_save("Geomodel 1")
+    upload_and_save("Image 1", image1)
+    upload_and_save("Geomodel 1", geomodel1)
 with right:
-    image2 = upload_and_save("Image 2")
-    geomodel2 = upload_and_save("Geomodel 2")
+    upload_and_save("Image 2", image2)
+    upload_and_save("Geomodel 2", geomodel2)
 
 # download demo
 if st.button("Download demo"):
     r = requests.get("https://github.com/CNES/cars/raw/master/tutorials/data_gizeh_small.tar.bz2")
-    image1 = "data_gizeh_small/img1.tif"
-    geomodel1 = "data_gizeh_small/img1.geom"
-    image2 = "data_gizeh_small/img2.tif"
-    geomodel2 = "data_gizeh_small/img2.geom"
+    arch_and_dest = {"data_gizeh_small/img1.tif": image1,
+                     "data_gizeh_small/img1.geom": geomodel1,
+                     "data_gizeh_small/img2.tif": image2,
+                     "data_gizeh_small/img2.geom": geomodel2}
 
     open("data_gizeh_small.tar.bz2", "wb").write(r.content)
     with tarfile.open("data_gizeh_small.tar.bz2", "r") as tf:
-        for filename in [image1, geomodel1, image2, geomodel2]:
-          tf.extract(filename)
+        for archive, destination in arch_and_dest.items():
+            tf.extract(archive)
+            os.rename(archive, destination)
+
+    os.rmdir("data_gizeh_small")
+    os.remove("data_gizeh_small.tar.bz2")
 
 # map
 def draw_envelope(image, geomodel, color, m=None):
-    if image is not None and geomodel is not None:
+    if os.path.exists(image) and os.path.exists(geomodel):
         # read image
         shareloc_img = Image(image)
         shareloc_mdl = RPC.from_any(geomodel)
