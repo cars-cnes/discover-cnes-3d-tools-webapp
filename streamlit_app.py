@@ -10,6 +10,8 @@ import folium
 from streamlit_folium import st_folium
 import tarfile
 import requests
+import cars_sensor_to_dsm
+
 
 MINI_LOGO ="https://raw.githubusercontent.com/CNES/cars/master/docs/source/images/picto_transparent_mini.png"
 st.set_page_config(page_title="cars-webapp",
@@ -31,6 +33,8 @@ image1 = "data/image1.tif"
 image2 = "data/image2.tif"
 geomodel1 = "data/image1.geom"
 geomodel2 = "data/image2.geom"
+dsm = "out/dsm.tif"
+dsm_wgs84 = dsm + ".wgs84.tif"
 
 def upload_and_save(name, filename):
     uploaded = st.file_uploader(name)
@@ -69,6 +73,16 @@ if st.button("Clean data directory"):
                      image2, geomodel2]:
         if os.path.exists(filename):
             os.remove(filename)
+# download demo
+if st.button("Compute DSM"):
+    if os.path.exists(image1) \
+       and os.path.exists(image2) \
+       and os.path.exists(geomodel1) \
+       and os.path.exists(geomodel2):
+        with st.spinner("Please wait..."):
+            cars_sensor_to_dsm.run(image1, image2,
+                                   geomodel1, geomodel2,
+                                   dsm)
 
 # map
 def draw_envelope(image, geomodel, color, m=None):
@@ -96,13 +110,27 @@ def draw_envelope(image, geomodel, color, m=None):
         m.add_child(fg)
         folium.Polygon(envelope[:, :2][:, [1, 0]],
                        color=color,
-                       fill_color=color,
                        tooltip=image).add_to(fg)
-
     return m
 
 m = draw_envelope(image1, geomodel1, "blue")
 m = draw_envelope(image2, geomodel2, "red", m)
+
+if m is not None and os.path.exists(dsm_wgs84):
+    with rio.open(dsm_wgs84) as src:
+        array = np.moveaxis(src.read(), 0, -1)
+        bounds = src.bounds
+        bbox = [(bounds.bottom, bounds.left), (bounds.top, bounds.right)]
+        folium.raster_layers.ImageOverlay(
+            name=dsm_wgs84,
+            image=array,
+            bounds=bbox,
+            opacity=1,
+            interactive=True,
+            cross_origin=False,
+            zindex=1,
+        ).add_to(m)
+
 if m is not None:
     folium.LayerControl().add_to(m)
     st_data = st_folium(m, width=725)
