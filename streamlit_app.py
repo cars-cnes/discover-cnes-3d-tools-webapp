@@ -1,10 +1,12 @@
 import os
+import shutil
 import streamlit as st
+from PIL import Image, ImageMath, ImageStat
 from io import StringIO
 import numpy as np
 import rasterio as rio
 from shareloc.geomodels.rpc import RPC
-from shareloc.image import Image
+from shareloc.image import Image as sImage
 from shareloc.geofunctions import localization
 import folium
 from streamlit_folium import st_folium
@@ -25,16 +27,30 @@ with center:
 st.markdown(("# CARS, a satellite multi view stereo framework"))
 
 # input images + geomodel
-st.markdown(("## inputs"))
-
-st.markdown(("### sensors"))
-
 image1 = "data/image1.tif"
 image2 = "data/image2.tif"
 geomodel1 = "data/image1.geom"
 geomodel2 = "data/image2.geom"
-dsm = "out/dsm.tif"
-dsm_wgs84 = dsm + ".wgs84.tif"
+output_dir = "out"
+outdata = {}
+
+left_path = os.path.join(output_dir, "left.tif")
+right_path = os.path.join(output_dir, "right.tif")
+outdata["resampling"] = {"left": left_path,
+                         "right": right_path}
+disp_path = os.path.join(output_dir, "disp.tif")
+outdata["matching"] = {"disp": disp_path}
+
+x_path = os.path.join(output_dir, "x.tif")
+y_path = os.path.join(output_dir, "y.tif")
+z_path = os.path.join(output_dir, "z.tif")
+
+outdata["triangulation"] = {"x": x_path,
+                            "y": y_path,
+                            "z": z_path}
+
+dsm_path = os.path.join(output_dir, "dsm.tif")
+outdata["rasterization"] = dsm_path
 
 def upload_and_save(name, filename):
     uploaded = st.file_uploader(name)
@@ -42,15 +58,6 @@ def upload_and_save(name, filename):
         with open(uploaded.name, "wb") as f:
             f.write(uploaded.getbuffer())
             os.rename(uploaded.name, filename)
-
-left, right = st.columns((1, 1))
-with left:
-    upload_and_save("Image 1", image1)
-    upload_and_save("Geomodel 1", geomodel1)
-with right:
-    upload_and_save("Image 2", image2)
-    upload_and_save("Geomodel 2", geomodel2)
-
 # download demo
 if st.button("Download demo"):
     r = requests.get("https://github.com/CNES/cars/raw/master/tutorials/data_gizeh_small.tar.bz2")
@@ -68,69 +75,151 @@ if st.button("Download demo"):
     os.rmdir("data_gizeh_small")
     os.remove("data_gizeh_small.tar.bz2")
 
-if st.button("Clean data directory"):
-    for filename in [image1, geomodel1,
-                     image2, geomodel2]:
-        if os.path.exists(filename):
-            os.remove(filename)
+st.markdown("or upload your own data")
+left, right = st.columns((1, 1))
+with left:
+    upload_and_save("Image 1", image1)
+    upload_and_save("Geomodel 1", geomodel1)
+with right:
+    upload_and_save("Image 2", image2)
+    upload_and_save("Geomodel 2", geomodel2)
+
+
 # download demo
-if st.button("Compute DSM"):
+if st.button("Run CARS"):
     if os.path.exists(image1) \
        and os.path.exists(image2) \
        and os.path.exists(geomodel1) \
        and os.path.exists(geomodel2):
-        with st.spinner("Please wait..."):
-            cars_sensor_to_dsm.run(image1, image2,
-                                   geomodel1, geomodel2,
-                                   dsm)
+        my_bar = st.progress(0, text="CARS pipeline is started.")
+        cars_sensor_to_dsm.run(image1, image2,
+                               geomodel1, geomodel2,
+                               output_dir,
+                               outdata,
+                               my_bar)
+        my_bar.empty()
+    else:
+        st.warning("Clic on \"Download demo\" or upload your own data before", icon="⚠️")
 
 # map
-def draw_envelope(image, geomodel, color, m=None):
-    if os.path.exists(image) and os.path.exists(geomodel):
-        # read image
-        shareloc_img = Image(image)
-        shareloc_mdl = RPC.from_any(geomodel)
+def create_map_drawing_envelopes():
+    def draw_envelope(image, geomodel, color, m=None):
+        if os.path.exists(image) and os.path.exists(geomodel):
+            # read image
+            shareloc_img = sImage(image)
+            shareloc_mdl = RPC.from_any(geomodel)
 
-        loc = localization.Localization(
-            shareloc_mdl,
-            image=shareloc_img)
+            loc = localization.Localization(
+                shareloc_mdl,
+                image=shareloc_img)
 
-        envelope = np.array([[0, 0], [0, shareloc_img.nb_columns],
-                             [shareloc_img.nb_rows, shareloc_img.nb_columns],
-                             [shareloc_img.nb_rows, 0]])
+            envelope = np.array([[0, 0], [0, shareloc_img.nb_columns],
+                                 [shareloc_img.nb_rows, shareloc_img.nb_columns],
+                                 [shareloc_img.nb_rows, 0]])
 
-        envelope = loc.direct(envelope[:, 0],
-                              envelope[:, 1],
-                              using_geotransform=True)
+            envelope = loc.direct(envelope[:, 0],
+                                  envelope[:, 1],
+                                  using_geotransform=True)
 
-        if m is None:
-            m = folium.Map(location=envelope[0, :2][::-1], zoom_start=16)
+            if m is None:
+                m = folium.Map(location=envelope[0, :2][::-1], zoom_start=16)
 
-        fg = folium.FeatureGroup(name=image, show=True)
-        m.add_child(fg)
-        folium.Polygon(envelope[:, :2][:, [1, 0]],
-                       color=color,
-                       tooltip=image).add_to(fg)
+            fg = folium.FeatureGroup(name=image, show=True)
+            m.add_child(fg)
+            folium.Polygon(envelope[:, :2][:, [1, 0]],
+                           color=color,
+                           tooltip=image).add_to(fg)
+        return m
+
+    m = draw_envelope(image1, geomodel1, "blue")
+    m = draw_envelope(image2, geomodel2, "red", m)
+
     return m
 
-m = draw_envelope(image1, geomodel1, "blue")
-m = draw_envelope(image2, geomodel2, "red", m)
+def show_images():
+    m = create_map_drawing_envelopes()
 
-if m is not None and os.path.exists(dsm_wgs84):
-    with rio.open(dsm_wgs84) as src:
-        array = np.moveaxis(src.read(), 0, -1)
-        bounds = src.bounds
-        bbox = [(bounds.bottom, bounds.left), (bounds.top, bounds.right)]
-        folium.raster_layers.ImageOverlay(
-            name=dsm_wgs84,
-            image=array,
-            bounds=bbox,
-            opacity=1,
-            interactive=True,
-            cross_origin=False,
-            zindex=1,
-        ).add_to(m)
+    if m is not None:
+        folium.LayerControl().add_to(m)
+        st_data = st_folium(m, height=500, width=500)
 
-if m is not None:
-    folium.LayerControl().add_to(m)
-    st_data = st_folium(m, width=725)
+def show_epipolar_images(step):
+    option = st.selectbox(
+        'Choose image', outdata[step].keys())
+
+    if os.path.exists(outdata[step][option]):
+        with rio.open(outdata[step][option]) as src:
+            array = src.read(1)
+            med = np.nanmedian(array)
+            std = np.nanstd(array)
+            maxi = med + 3*std
+            mini = med - 3*std
+            array -= mini
+            array /= (maxi-mini)
+            array[array > 1] = 1
+            array[array < 0] = 0
+            array *= 255
+
+        im = Image.fromarray(array)
+        st.image(im.convert("RGB"))
+
+    else:
+        st.warning("Clic on \"Run CARS\" before", icon="⚠️")
+
+def show_rasterization():
+    dsm = outdata["rasterization"]
+    m = create_map_drawing_envelopes()
+
+    if m is not None and os.path.exists(dsm):
+        with rio.open(dsm) as src:
+            array = np.moveaxis(src.read(), 0, -1)
+            bounds = src.bounds
+            bbox = [(bounds.bottom, bounds.left), (bounds.top, bounds.right)]
+            folium.raster_layers.ImageOverlay(
+                name=dsm,
+                image=array,
+                bounds=bbox,
+                opacity=1,
+                interactive=True,
+                cross_origin=False,
+                zindex=1,
+            ).add_to(m)
+
+        folium.LayerControl().add_to(m)
+        st_data = st_folium(m, height=500, width=500)
+    else:
+        st.warning("Clic on \"Run CARS\" before", icon="⚠️")
+
+from st_clickable_images import clickable_images
+
+url_images = "https://raw.githubusercontent.com/CNES/cars/master/docs/source/images/"
+steps = ["images", "resampling", "matching", "triangulation", "rasterization"]
+url_steps = [url_images + ".".join(["dense", step, "drawio.png"]) for step in steps]
+
+if os.path.exists(image1) \
+   and os.path.exists(image2) \
+   and os.path.exists(geomodel1) \
+   and os.path.exists(geomodel2):
+    col1, col2 = st.columns([1, 3])
+
+    with col1:
+        clicked = clickable_images(
+            paths=url_steps,
+            titles=steps,
+            img_style={"width": "220%"}
+        )
+
+    with col2:
+        if clicked in [-1, 0]:
+            show_images()
+        elif clicked == 4:
+            show_rasterization()
+        else:
+            show_epipolar_images(steps[clicked])
+
+    if st.button("Clean data and output directory"):
+        for filename in [image1, geomodel1,
+                         image2, geomodel2]:
+            if os.path.exists(filename):
+                os.remove(filename)
+        shutil.rmtree(output_dir, ignore_errors=True)

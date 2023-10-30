@@ -44,7 +44,9 @@ def save_data(cars_ds, file_name, tag, dtype="float32", nodata=-9999):
     desc.close()
 
 
-def run(image1, image2, geomodel1, geomodel2, dsm_path):
+def run(image1, image2, geomodel1, geomodel2,
+        output_dir, outdata, my_bar):
+
     # Import external plugins
     import_plugins()
 
@@ -63,7 +65,6 @@ def run(image1, image2, geomodel1, geomodel2, dsm_path):
     }
 
     inputs = sensors_inputs.sensors_check_inputs(inputs_conf)
-    output_dir = os.path.dirname(dsm_path)
 
     # Get geometry plugin
     (_, _, geom_plugin_without_dem_and_geoid, geom_plugin_with_dem_and_geoid) = \
@@ -89,6 +90,8 @@ def run(image1, image2, geomodel1, geomodel2, dsm_path):
     if inputs["initial_elevation"] is None:
         geom_plugin = geom_plugin_without_dem_and_geoid
 
+
+    my_bar.progress(5, text="Sparse pipeline: resampling")
     grid_left, grid_right = epipolar_grid_generation_application.run(
         sensor_image_left,
         sensor_image_right,
@@ -105,6 +108,7 @@ def run(image1, image2, geomodel1, geomodel2, dsm_path):
         margins=sparse_matching_application.get_margins()
     )
 
+    my_bar.progress(10, text="Sparse pipeline: matching")
     epipolar_matches_left, _ = sparse_matching_application.run(
         epipolar_image_left,
         epipolar_image_right,
@@ -123,6 +127,7 @@ def run(image1, image2, geomodel1, geomodel2, dsm_path):
                                                         False,
                                                         output_dir)
 
+    my_bar.progress(15, text="Sparse pipeline: triangulation")
     triangulated_matches = dem_generation_tools.triangulate_sparse_matches(
         sensor_image_left,
         sensor_image_right,
@@ -141,6 +146,7 @@ def run(image1, image2, geomodel1, geomodel2, dsm_path):
         disp_to_alt_ratio=grid_left.attributes["disp_to_alt_ratio"]
     )
 
+    my_bar.progress(20, text="Dense pipeline: resampling")
     dense_matching_margins, disp_min, disp_max = dense_matching_application.get_margins(
         grid_left, disp_min=dmin, disp_max=dmax)
 
@@ -163,6 +169,12 @@ def run(image1, image2, geomodel1, geomodel2, dsm_path):
         add_color=True,
     )
 
+    save_data(new_epipolar_image_left,
+              outdata["resampling"]["left"], "im")
+    save_data(new_epipolar_image_right,
+              outdata["resampling"]["right"], "im")
+
+    my_bar.progress(30, text="Dense pipeline: matching")
     epipolar_disparity_map = dense_matching_application.run(
         new_epipolar_image_left,
         new_epipolar_image_right,
@@ -170,6 +182,10 @@ def run(image1, image2, geomodel1, geomodel2, dsm_path):
         disp_min=disp_min,
         disp_max=disp_max,
     )
+
+
+    save_data(epipolar_disparity_map,
+              outdata["matching"]["disp"], "disp")
 
     epsg = preprocessing.compute_epsg(
         sensor_image_left,
@@ -182,6 +198,8 @@ def run(image1, image2, geomodel1, geomodel2, dsm_path):
         disp_max=disp_max
     )
 
+
+    my_bar.progress(80, text="Dense pipeline: triangulation")
     epipolar_points_cloud = triangulation_application.run(
         sensor_image_left,
         sensor_image_right,
@@ -197,6 +215,10 @@ def run(image1, image2, geomodel1, geomodel2, dsm_path):
         disp_min=disp_min,
         disp_max=disp_max,
     )
+
+    for dim in ["x", "y", "z"]:
+        save_data(epipolar_points_cloud,
+                  outdata["triangulation"][dim], dim)
 
     current_terrain_roi_bbox = preprocessing.compute_terrain_bbox(
         sensor_image_left,
@@ -225,17 +247,20 @@ def run(image1, image2, geomodel1, geomodel2, dsm_path):
         optimal_terrain_tile_width=optimal_terrain_tile_width
     )
 
+    my_bar.progress(95, text="Dense pipeline: rasterization")
     dsm = rasterization_application.run(
         merged_points_clouds,
         epsg,
         orchestrator=cars_orchestrator
     )
 
-    save_data(dsm, dsm_path, "hgt")
+    dsm_utm_path = os.path.join(output_dir, "dsm_utm.tif")
+    save_data(dsm, dsm_utm_path, "hgt")
+    dsm_path = outdata["rasterization"]
 
     dst_crs = 'EPSG:4326'
 
-    with rio.open(dsm_path) as src:
+    with rio.open(dsm_utm_path) as src:
         transform, width, height = rio.warp.calculate_default_transform(
             src.crs, dst_crs, src.width, src.height, *src.bounds)
         kwargs = src.meta.copy()
@@ -246,7 +271,7 @@ def run(image1, image2, geomodel1, geomodel2, dsm_path):
             'height': height
         })
 
-        with rio.open(dsm_path+".wgs84.tif", 'w', **kwargs) as dst:
+        with rio.open(dsm_path, 'w', **kwargs) as dst:
             for i in range(1, src.count + 1):
                 rio.warp.reproject(
                     source=rio.band(src, i),
@@ -256,3 +281,5 @@ def run(image1, image2, geomodel1, geomodel2, dsm_path):
                     dst_transform=transform,
                     dst_crs=dst_crs,
                     resampling=rio.warp.Resampling.bilinear)
+
+    os.remove(dsm_utm_path)
