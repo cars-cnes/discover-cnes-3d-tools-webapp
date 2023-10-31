@@ -174,12 +174,12 @@ def show_epipolar_images(step):
 
 def show_rasterization():
     dsm = outdata["rasterization"]
-
     m = create_map_drawing_envelopes(show=False)
 
     if m is not None and os.path.exists(dsm):
         with rio.open(dsm) as src:
             array = np.moveaxis(src.read(), 0, -1)
+            array = np.dstack((array, array, array, array!=src.nodata))
             bounds = src.bounds
             bbox = [(bounds.bottom, bounds.left), (bounds.top, bounds.right)]
             folium.raster_layers.ImageOverlay(
@@ -191,8 +191,8 @@ def show_rasterization():
                 cross_origin=False,
                 zindex=1,
             ).add_to(m)
-            folium.LayerControl().add_to(m)
-            st_data = st_folium(m, height=500, width=500)
+        folium.LayerControl().add_to(m)
+        st_data = st_folium(m, height=500, width=500)
 
     # see https://discuss.streamlit.io/t/streamlit-cloud-port-proxying-on-streamlit-io/24748/4
     # if os.path.exists(dsm):
