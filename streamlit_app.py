@@ -190,7 +190,9 @@ def show_rasterization():
                 interactive=True,
                 cross_origin=False,
                 zindex=1,
-        ).add_to(m)
+            ).add_to(m)
+            folium.LayerControl().add_to(m)
+            st_data = st_folium(m, height=500, width=500)
 
     # see https://discuss.streamlit.io/t/streamlit-cloud-port-proxying-on-streamlit-io/24748/4
     # if os.path.exists(dsm):
@@ -199,6 +201,7 @@ def show_rasterization():
     #     m = folium.Map(location=client.center(), zoom_start=client.default_zoom)
     #     t.add_to(m)
     #     st_data = st_folium(m, height=500, width=500)
+
     else:
         st.warning("Clic on \"Run CARS\" before", icon="⚠️")
 
