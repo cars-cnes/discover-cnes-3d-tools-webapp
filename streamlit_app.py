@@ -13,7 +13,7 @@ from streamlit_folium import st_folium
 import tarfile
 import requests
 import cars_sensor_to_dsm
-from localtileserver import get_folium_tile_layer, TileClient
+# from localtileserver import get_folium_tile_layer, TileClient
 
 MINI_LOGO ="https://raw.githubusercontent.com/CNES/cars/master/docs/source/images/picto_transparent_mini.png"
 st.set_page_config(page_title="cars-webapp",
@@ -175,12 +175,30 @@ def show_epipolar_images(step):
 def show_rasterization():
     dsm = outdata["rasterization"]
 
-    if os.path.exists(dsm):
-        client = TileClient(dsm)
-        t = get_folium_tile_layer(client)
-        m = folium.Map(location=client.center(), zoom_start=client.default_zoom)
-        t.add_to(m)
-        st_data = st_folium(m, height=500, width=500)
+    m = create_map_drawing_envelopes(show=False)
+
+    if m is not None and os.path.exists(dsm):
+        with rio.open(dsm) as src:
+            array = np.moveaxis(src.read(), 0, -1)
+            bounds = src.bounds
+            bbox = [(bounds.bottom, bounds.left), (bounds.top, bounds.right)]
+            folium.raster_layers.ImageOverlay(
+                name=dsm,
+                image=array,
+                bounds=bbox,
+                opacity=1,
+                interactive=True,
+                cross_origin=False,
+                zindex=1,
+        ).add_to(m)
+
+    # see https://discuss.streamlit.io/t/streamlit-cloud-port-proxying-on-streamlit-io/24748/4
+    # if os.path.exists(dsm):
+    #     client = TileClient(dsm)
+    #     t = get_folium_tile_layer(client)
+    #     m = folium.Map(location=client.center(), zoom_start=client.default_zoom)
+    #     t.add_to(m)
+    #     st_data = st_folium(m, height=500, width=500)
     else:
         st.warning("Clic on \"Run CARS\" before", icon="⚠️")
 
