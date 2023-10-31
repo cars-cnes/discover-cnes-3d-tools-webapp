@@ -170,9 +170,11 @@ def run(image1, image2, geomodel1, geomodel2,
     )
 
     save_data(new_epipolar_image_left,
-              outdata["resampling"]["left"], "im")
+              outdata["resampling"]["left"], "im",
+              nodata=0)
     save_data(new_epipolar_image_right,
-              outdata["resampling"]["right"], "im")
+              outdata["resampling"]["right"], "im",
+              nodata=0)
 
     my_bar.progress(30, text="Dense pipeline: matching")
     epipolar_disparity_map = dense_matching_application.run(
@@ -185,7 +187,8 @@ def run(image1, image2, geomodel1, geomodel2,
 
 
     save_data(epipolar_disparity_map,
-              outdata["matching"]["disp"], "disp")
+              outdata["matching"]["disp"], "disp",
+              nodata=0)
 
     epsg = preprocessing.compute_epsg(
         sensor_image_left,
@@ -218,7 +221,8 @@ def run(image1, image2, geomodel1, geomodel2,
 
     for dim in ["x", "y", "z"]:
         save_data(epipolar_points_cloud,
-                  outdata["triangulation"][dim], dim)
+                  outdata["triangulation"][dim], dim,
+                  nodata=np.nan)
 
     current_terrain_roi_bbox = preprocessing.compute_terrain_bbox(
         sensor_image_left,
@@ -255,7 +259,7 @@ def run(image1, image2, geomodel1, geomodel2,
     )
 
     dsm_utm_path = os.path.join(output_dir, "dsm_utm.tif")
-    save_data(dsm, dsm_utm_path, "hgt")
+    save_data(dsm, dsm_utm_path, "hgt", nodata=-32768)
     dsm_path = outdata["rasterization"]
 
     dst_crs = 'EPSG:4326'

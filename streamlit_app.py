@@ -13,7 +13,7 @@ from streamlit_folium import st_folium
 import tarfile
 import requests
 import cars_sensor_to_dsm
-
+from localtileserver import get_folium_tile_layer, TileClient
 
 MINI_LOGO ="https://raw.githubusercontent.com/CNES/cars/master/docs/source/images/picto_transparent_mini.png"
 st.set_page_config(page_title="cars-webapp",
@@ -58,6 +58,7 @@ def upload_and_save(name, filename):
         with open(uploaded.name, "wb") as f:
             f.write(uploaded.getbuffer())
             os.rename(uploaded.name, filename)
+
 # download demo
 if st.button("Download demo"):
     r = requests.get("https://github.com/CNES/cars/raw/master/tutorials/data_gizeh_small.tar.bz2")
@@ -102,7 +103,7 @@ if st.button("Run CARS"):
         st.warning("Clic on \"Download demo\" or upload your own data before", icon="⚠️")
 
 # map
-def create_map_drawing_envelopes():
+def create_map_drawing_envelopes(show):
     def draw_envelope(image, geomodel, color, m=None):
         if os.path.exists(image) and os.path.exists(geomodel):
             # read image
@@ -124,10 +125,12 @@ def create_map_drawing_envelopes():
             if m is None:
                 m = folium.Map(location=envelope[0, :2][::-1], zoom_start=16)
 
-            fg = folium.FeatureGroup(name=image, show=True)
+            fg = folium.FeatureGroup(name=image, show=show)
             m.add_child(fg)
             folium.Polygon(envelope[:, :2][:, [1, 0]],
                            color=color,
+                           fill_color=color,
+                           opacity=0.1,
                            tooltip=image).add_to(fg)
         return m
 
@@ -137,11 +140,23 @@ def create_map_drawing_envelopes():
     return m
 
 def show_images():
-    m = create_map_drawing_envelopes()
+    m = create_map_drawing_envelopes(show=True)
 
     if m is not None:
         folium.LayerControl().add_to(m)
         st_data = st_folium(m, height=500, width=500)
+
+def enhance(array, nodata):
+    array[array == nodata] = np.nan
+    med = np.nanmedian(array)
+    std = np.nanstd(array)
+    maxi = med + 3*std
+    mini = med - 3*std
+    array = 255*(array-mini) / (maxi-mini)
+    array[array > 255] = 255
+    array[array < 0] = 0
+    array = np.nan_to_num(array, nan=255)
+    return array.astype(np.uint8)
 
 def show_epipolar_images(step):
     option = st.selectbox(
@@ -149,16 +164,7 @@ def show_epipolar_images(step):
 
     if os.path.exists(outdata[step][option]):
         with rio.open(outdata[step][option]) as src:
-            array = src.read(1)
-            med = np.nanmedian(array)
-            std = np.nanstd(array)
-            maxi = med + 3*std
-            mini = med - 3*std
-            array -= mini
-            array /= (maxi-mini)
-            array[array > 1] = 1
-            array[array < 0] = 0
-            array *= 255
+            array = enhance(src.read(1), src.nodata)
 
         im = Image.fromarray(array)
         st.image(im.convert("RGB"))
@@ -168,24 +174,12 @@ def show_epipolar_images(step):
 
 def show_rasterization():
     dsm = outdata["rasterization"]
-    m = create_map_drawing_envelopes()
 
-    if m is not None and os.path.exists(dsm):
-        with rio.open(dsm) as src:
-            array = np.moveaxis(src.read(), 0, -1)
-            bounds = src.bounds
-            bbox = [(bounds.bottom, bounds.left), (bounds.top, bounds.right)]
-            folium.raster_layers.ImageOverlay(
-                name=dsm,
-                image=array,
-                bounds=bbox,
-                opacity=1,
-                interactive=True,
-                cross_origin=False,
-                zindex=1,
-            ).add_to(m)
-
-        folium.LayerControl().add_to(m)
+    if os.path.exists(dsm):
+        client = TileClient(dsm)
+        t = get_folium_tile_layer(client)
+        m = folium.Map(location=client.center(), zoom_start=client.default_zoom)
+        t.add_to(m)
         st_data = st_folium(m, height=500, width=500)
     else:
         st.warning("Clic on \"Run CARS\" before", icon="⚠️")
