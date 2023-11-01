@@ -13,39 +13,76 @@ from cars.applications.dem_generation import dem_generation_tools
 from cars.core import preprocessing
 import cars.pipelines.sensor_to_dense_dsm.sensor_dense_dsm_constants as sens_cst
 
-def save_data(cars_ds, file_name, tag, dtype="float32", nodata=-9999):
-    """
-    Save CarsDataset
-    """
+from shareloc.geomodels.rpc import RPC
+from shareloc.image import Image as sImage
+from shareloc.geofunctions import localization
 
-    # create descriptor
-    desc = None
+import tempfile
+import shutil
+import streamlit as st
 
-    # Save tiles
-    for row in range(cars_ds.shape[0]):
-        for col in range(cars_ds.shape[1]):
-            if cars_ds[row, col] is not None:
-                if desc is None:
-                    desc = cars_ds.generate_descriptor(
-                        cars_ds[row, col],
-                        file_name,
-                        tag=tag,
-                        dtype=dtype,
-                        nodata=nodata,
-                    )
-                cars_ds.run_save(
-                    cars_ds[row, col],
-                    file_name,
-                    tag=tag,
-                    descriptor=desc,
-                )
+import requests
+import zipfile
 
-    # close descriptor
-    desc.close()
+# download srtm
+def get_srtm_tif_name(lat, lon):
+    """Download srtm tiles"""
+    # longitude: [1, 72] == [-180, +180]
+    tlon = (1+np.floor((lon+180)/5)) % 72
+    tlon = 72 if tlon == 0 else tlon
 
+    # latitude: [1, 24] == [60, -60]
+    tlat = 1+np.floor((60-lat)/5)
+    tlat = 24 if tlat == 25 else tlat
 
-def run(image1, image2, geomodel1, geomodel2, srtm_path,
-        output_dir, outdata, my_bar):
+    srtm = "https://srtm.csi.cgiar.org/wp-content/uploads/files/srtm_5x5/TIFF/srtm_%02d_%02d.zip" % (tlon, tlat)
+    return srtm
+
+def get_temp_data(data):
+    if isinstance(data, str) is False:
+        data_suffix = os.path.splitext(data.name)[-1]
+        __, temp_data = tempfile.mkstemp(suffix=data_suffix)
+        with open(temp_data, "wb") as f:
+            f.write(data.getbuffer())
+    else:
+        temp_data = data
+    return temp_data
+
+def remove_temp_data(data, temp_data):
+    if isinstance(data, str) is False:
+        os.remove(temp_data)
+
+def run(image1, image2, geomodel1, geomodel2):
+    temp_image1 = get_temp_data(image1)
+    temp_image2 = get_temp_data(image2)
+    temp_geomodel1 = get_temp_data(geomodel1)
+    temp_geomodel2 = get_temp_data(geomodel2)
+
+    outdata = {}
+
+    my_bar = st.progress(0, text="Download SRTM")
+    tempdir = tempfile.mkdtemp()
+    mycwd = os.getcwd()
+    os.chdir(tempdir)
+
+    # get srtm tile
+    shareloc_img = sImage(temp_image1)
+    shareloc_mdl = RPC.from_any(temp_geomodel1)
+    loc = localization.Localization(
+        shareloc_mdl,
+        image=shareloc_img)
+
+    center = loc.direct(shareloc_img.nb_rows/2,
+                        shareloc_img.nb_columns/2,
+                        using_geotransform=True)[0]
+
+    srtm = get_srtm_tif_name(center[1], center[0])
+    r = requests.get(srtm)
+    srtm_bn = os.path.basename(srtm)
+    srtm_tif = os.path.splitext(srtm_bn)[0]+".tif"
+    open(srtm_bn, "wb").write(r.content)
+    with zipfile.ZipFile(srtm_bn, "r") as zf:
+        zf.extract(srtm_tif)
 
     # Import external plugins
     import_plugins()
@@ -53,19 +90,19 @@ def run(image1, image2, geomodel1, geomodel2, srtm_path,
     inputs_conf = {
         "sensors": {
             "left": {
-                "image": image1,
-                "geomodel": geomodel1
+                "image": temp_image1,
+                "geomodel": temp_geomodel1
             },
             "right": {
-                "image": image2,
-                "geomodel": geomodel2
+                "image": temp_image2,
+                "geomodel": temp_geomodel2
             }
         },
         "pairing": [["left", "right"]],
     }
 
-    if os.path.exists(srtm_path):
-        inputs_conf["initial_elevation"] = srtm_path
+    if os.path.exists(srtm_tif):
+        inputs_conf["initial_elevation"] = srtm_tif
 
     inputs = sensors_inputs.sensors_check_inputs(inputs_conf)
 
@@ -85,7 +122,7 @@ def run(image1, image2, geomodel1, geomodel2, srtm_path,
     # Use sequential mode in notebook
     orchestrator_conf = {"mode": "sequential"}
     cars_orchestrator = orchestrator.Orchestrator(orchestrator_conf=orchestrator_conf,
-                                                  out_dir=output_dir)
+                                                  out_dir=tempdir)
     _, sensor_image_left, sensor_image_right = \
         sensors_inputs.generate_inputs(inputs,
                                        geom_plugin_without_dem_and_geoid)[0]
@@ -127,7 +164,7 @@ def run(image1, image2, geomodel1, geomodel2, srtm_path,
     corrected_grid_right = grid_correction.correct_grid(grid_right,
                                                         grid_correction_coef,
                                                         False,
-                                                        output_dir)
+                                                        tempdir)
 
     my_bar.progress(15, text="Sparse pipeline: triangulation")
     triangulated_matches = dem_generation_tools.triangulate_sparse_matches(
@@ -171,12 +208,7 @@ def run(image1, image2, geomodel1, geomodel2, srtm_path,
         add_color=True,
     )
 
-    save_data(new_epipolar_image_left,
-              outdata["resampling"]["left"], "im",
-              nodata=0)
-    save_data(new_epipolar_image_right,
-              outdata["resampling"]["right"], "im",
-              nodata=0)
+    outdata["resampling"] = {"left": {"data": new_epipolar_image_left, "tag": "im", "nodata": 0}, "right": {"data": new_epipolar_image_right, "tag": "im", "nodata": 0}}
 
     my_bar.progress(30, text="Dense pipeline: matching")
     epipolar_disparity_map = dense_matching_application.run(
@@ -187,10 +219,7 @@ def run(image1, image2, geomodel1, geomodel2, srtm_path,
         disp_max=disp_max,
     )
 
-
-    save_data(epipolar_disparity_map,
-              outdata["matching"]["disp"], "disp",
-              nodata=0)
+    outdata["matching"] = {"disp": {"data": epipolar_disparity_map, "tag": "disp", "nodata": 0}}
 
     epsg = preprocessing.compute_epsg(
         sensor_image_left,
@@ -221,10 +250,7 @@ def run(image1, image2, geomodel1, geomodel2, srtm_path,
         disp_max=disp_max,
     )
 
-    for dim in ["x", "y", "z"]:
-        save_data(epipolar_points_cloud,
-                  outdata["triangulation"][dim], dim,
-                  nodata=np.nan)
+    outdata["triangulation"] = {"x": {"data": epipolar_points_cloud, "tag": "x", "nodata": np.nan}, "y": {"data": epipolar_points_cloud, "tag": "y", "nodata": np.nan}, "z": {"data": epipolar_points_cloud, "tag": "z", "nodata": np.nan}}
 
     current_terrain_roi_bbox = preprocessing.compute_terrain_bbox(
         sensor_image_left,
@@ -260,32 +286,15 @@ def run(image1, image2, geomodel1, geomodel2, srtm_path,
         orchestrator=cars_orchestrator
     )
 
-    dsm_utm_path = os.path.join(output_dir, "dsm_utm.tif")
-    save_data(dsm, dsm_utm_path, "hgt", nodata=-32768)
-    dsm_path = outdata["rasterization"]
+    outdata["rasterization"] = dsm
 
-    dst_crs = 'EPSG:4326'
+    shutil.rmtree(tempdir, ignore_errors=True)
+    my_bar.empty()
+    os.chdir(mycwd)
 
-    with rio.open(dsm_utm_path) as src:
-        transform, width, height = rio.warp.calculate_default_transform(
-            src.crs, dst_crs, src.width, src.height, *src.bounds)
-        kwargs = src.meta.copy()
-        kwargs.update({
-            'crs': dst_crs,
-            'transform': transform,
-            'width': width,
-            'height': height
-        })
+    remove_temp_data(image1, temp_image1)
+    remove_temp_data(image2, temp_image2)
+    remove_temp_data(geomodel1, temp_geomodel1)
+    remove_temp_data(geomodel2, temp_geomodel2)
 
-        with rio.open(dsm_path, 'w', **kwargs) as dst:
-            for i in range(1, src.count + 1):
-                rio.warp.reproject(
-                    source=rio.band(src, i),
-                    destination=rio.band(dst, i),
-                    src_transform=src.transform,
-                    src_crs=src.crs,
-                    dst_transform=transform,
-                    dst_crs=dst_crs,
-                    resampling=rio.warp.Resampling.bilinear)
-
-    os.remove(dsm_utm_path)
+    return outdata
