@@ -44,7 +44,7 @@ def save_data(cars_ds, file_name, tag, dtype="float32", nodata=-9999):
     desc.close()
 
 
-def run(image1, image2, geomodel1, geomodel2,
+def run(image1, image2, geomodel1, geomodel2, srtm_path,
         output_dir, outdata, my_bar):
 
     # Import external plugins
@@ -61,8 +61,11 @@ def run(image1, image2, geomodel1, geomodel2,
                 "geomodel": geomodel2
             }
         },
-        "pairing": [["left", "right"]]
+        "pairing": [["left", "right"]],
     }
+
+    if os.path.exists(srtm_path):
+        inputs_conf["initial_elevation"] = srtm_path
 
     inputs = sensors_inputs.sensors_check_inputs(inputs_conf)
 
@@ -89,7 +92,6 @@ def run(image1, image2, geomodel1, geomodel2,
     geom_plugin = geom_plugin_with_dem_and_geoid
     if inputs["initial_elevation"] is None:
         geom_plugin = geom_plugin_without_dem_and_geoid
-
 
     my_bar.progress(5, text="Sparse pipeline: resampling")
     grid_left, grid_right = epipolar_grid_generation_application.run(

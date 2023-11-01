@@ -11,6 +11,7 @@ from shareloc.geofunctions import localization
 import folium
 from streamlit_folium import st_folium
 import tarfile
+import zipfile
 import requests
 import cars_sensor_to_dsm
 # from localtileserver import get_folium_tile_layer, TileClient
@@ -31,6 +32,7 @@ image1 = "data/image1.tif"
 image2 = "data/image2.tif"
 geomodel1 = "data/image1.geom"
 geomodel2 = "data/image2.geom"
+srtm_path = "data/srtm.tif"
 output_dir = "out"
 outdata = {}
 
@@ -61,20 +63,22 @@ def upload_and_save(name, filename):
 
 # download demo
 if st.button("Download demo"):
-    r = requests.get("https://github.com/CNES/cars/raw/master/tutorials/data_gizeh_small.tar.bz2")
-    arch_and_dest = {"data_gizeh_small/img1.tif": image1,
-                     "data_gizeh_small/img1.geom": geomodel1,
-                     "data_gizeh_small/img2.tif": image2,
-                     "data_gizeh_small/img2.geom": geomodel2}
+    with st.spinner('Please wait...'):
+        r = requests.get("https://github.com/CNES/cars/raw/master/tutorials/data_gizeh_small.tar.bz2")
+        arch_and_dest = {"data_gizeh_small/img1.tif": image1,
+                         "data_gizeh_small/img1.geom": geomodel1,
+                         "data_gizeh_small/img2.tif": image2,
+                         "data_gizeh_small/img2.geom": geomodel2}
 
-    open("data_gizeh_small.tar.bz2", "wb").write(r.content)
-    with tarfile.open("data_gizeh_small.tar.bz2", "r") as tf:
-        for archive, destination in arch_and_dest.items():
-            tf.extract(archive)
-            os.rename(archive, destination)
+        open("data_gizeh_small.tar.bz2", "wb").write(r.content)
+        with tarfile.open("data_gizeh_small.tar.bz2", "r") as tf:
+            for archive, destination in arch_and_dest.items():
+                tf.extract(archive)
+                os.rename(archive, destination)
 
-    os.rmdir("data_gizeh_small")
-    os.remove("data_gizeh_small.tar.bz2")
+        os.rmdir("data_gizeh_small")
+        os.remove("data_gizeh_small.tar.bz2")
+
 
 st.markdown("or upload your own data")
 left, right = st.columns((1, 1))
@@ -85,16 +89,59 @@ with right:
     upload_and_save("Image 2", image2)
     upload_and_save("Geomodel 2", geomodel2)
 
+def get_envelope(image, geomodel):
+    # read image
+    shareloc_img = sImage(image)
+    shareloc_mdl = RPC.from_any(geomodel)
+    loc = localization.Localization(
+        shareloc_mdl,
+        image=shareloc_img)
 
-# download demo
+    envelope = np.array([[0, 0], [0, shareloc_img.nb_columns],
+                         [shareloc_img.nb_rows, shareloc_img.nb_columns],
+                         [shareloc_img.nb_rows, 0]])
+
+    envelope = loc.direct(envelope[:, 0],
+                          envelope[:, 1],
+                          using_geotransform=True)
+    return envelope
+
+# download srtm
+def get_srtm_tif_name(lat, lon):
+    """Download srtm tiles"""
+    # longitude: [1, 72] == [-180, +180]
+    tlon = (1+np.floor((lon+180)/5)) % 72
+    tlon = 72 if tlon == 0 else tlon
+
+    # latitude: [1, 24] == [60, -60]
+    tlat = 1+np.floor((60-lat)/5)
+    tlat = 24 if tlat == 25 else tlat
+
+    srtm = "https://srtm.csi.cgiar.org/wp-content/uploads/files/srtm_5x5/TIFF/srtm_%02d_%02d.zip" % (tlon, tlat)
+    return srtm
+
+# run cars
 if st.button("Run CARS"):
     if os.path.exists(image1) \
        and os.path.exists(image2) \
        and os.path.exists(geomodel1) \
        and os.path.exists(geomodel2):
-        my_bar = st.progress(0, text="CARS pipeline is started.")
+        my_bar = st.progress(0, text="Download SRTM")
+        env1 = get_envelope(image1, geomodel1)
+        upleft = env1[0, :2][::-1]
+        srtm = get_srtm_tif_name(*upleft)
+        r = requests.get(srtm)
+        srtm_bn = os.path.basename(srtm)
+        srtm_tif = os.path.splitext(srtm_bn)[0]+".tif"
+        open(srtm_bn, "wb").write(r.content)
+        with zipfile.ZipFile(srtm_bn, "r") as zf:
+            zf.extract(srtm_tif)
+            os.rename(srtm_tif, srtm_path)
+        os.remove(srtm_bn)
+
         cars_sensor_to_dsm.run(image1, image2,
                                geomodel1, geomodel2,
+                               srtm_path,
                                output_dir,
                                outdata,
                                my_bar)
@@ -106,24 +153,11 @@ if st.button("Run CARS"):
 def create_map_drawing_envelopes(show):
     def draw_envelope(image, geomodel, color, m=None):
         if os.path.exists(image) and os.path.exists(geomodel):
-            # read image
-            shareloc_img = sImage(image)
-            shareloc_mdl = RPC.from_any(geomodel)
-
-            loc = localization.Localization(
-                shareloc_mdl,
-                image=shareloc_img)
-
-            envelope = np.array([[0, 0], [0, shareloc_img.nb_columns],
-                                 [shareloc_img.nb_rows, shareloc_img.nb_columns],
-                                 [shareloc_img.nb_rows, 0]])
-
-            envelope = loc.direct(envelope[:, 0],
-                                  envelope[:, 1],
-                                  using_geotransform=True)
+            envelope = get_envelope(image, geomodel)
 
             if m is None:
-                m = folium.Map(location=envelope[0, :2][::-1], zoom_start=16)
+                upleft = envelope[0, :2][::-1]
+                m = folium.Map(location=upleft, zoom_start=16)
 
             fg = folium.FeatureGroup(name=image, show=show)
             m.add_child(fg)
@@ -179,7 +213,9 @@ def show_rasterization():
     if m is not None and os.path.exists(dsm):
         with rio.open(dsm) as src:
             array = np.moveaxis(src.read(), 0, -1)
-            array = np.dstack((array, array, array, array!=src.nodata))
+            nodata = 255*(array!=src.nodata)
+            array = enhance(array, src.nodata)
+            array = np.dstack((array, array, array, nodata))
             bounds = src.bounds
             bbox = [(bounds.bottom, bounds.left), (bounds.top, bounds.right)]
             folium.raster_layers.ImageOverlay(
