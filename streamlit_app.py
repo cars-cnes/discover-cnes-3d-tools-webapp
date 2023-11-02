@@ -31,13 +31,23 @@ __, center, __ = st.columns((1, 4, 1))
 with center:
     st.markdown("![Logo]("+MINI_LOGO+")")
 
-st.markdown(("# CARS, a satellite multi view stereo framework"))
+st.markdown(("## CARS, a satellite multi view stereo framework"))
 
-data_select = st.radio("Select the dataset",
-                       ["Use demo", "Upload your own data"])
+col1, col2 = st.columns([1, 1])
+
+with col1:
+    st.markdown(("#### Step 1: Select the dataset"))
+    data_select = st.radio("Select the dataset",
+                           ["Pyramids",
+                            "Turkey pre-event",
+                            "Turkey post-event",
+                            "Upload your own data"],
+                           label_visibility="collapsed")
 
 if data_select == "Upload your own data":
-    uploaded_files = st.file_uploader("or upload your own data", accept_multiple_files=True)
+    uploaded_files = st.file_uploader("or upload your own data",
+                                      accept_multiple_files=True,
+                                      label_visibility="collapsed")
     uploaded_dict = {None: None}
     choices = []
     for uploaded in uploaded_files:
@@ -49,12 +59,22 @@ if data_select == "Upload your own data":
     geomodel1 = uploaded_dict[st.selectbox("Geomodel 1", choices)]
     geomodel2 = uploaded_dict[st.selectbox("Geomodel 2", choices)]
 
-else:
+elif data_select == "Pyramids":
     image1 = os.path.abspath("demo/img1.tif")
     image2 = os.path.abspath("demo/img2.tif")
     geomodel1 = os.path.abspath("demo/img1.geom")
     geomodel2 = os.path.abspath("demo/img2.geom")
 
+elif data_select == "Turkey pre-event":
+    image1 = os.path.abspath("demo/pre_event_img1.tif")
+    image2 = os.path.abspath("demo/pre_event_img2.tif")
+    geomodel1 = os.path.abspath("demo/pre_event_img1.geom")
+    geomodel2 = os.path.abspath("demo/pre_event_img2.geom")
+elif data_select == "Turkey post-event":
+    image1 = os.path.abspath("demo/post_event_img1.tif")
+    image2 = os.path.abspath("demo/post_event_img2.tif")
+    geomodel1 = os.path.abspath("demo/post_event_img1.geom")
+    geomodel2 = os.path.abspath("demo/post_event_img2.geom")
 
 def get_envelope_and_center(image, geomodel):
     if isinstance(image, str) is False:
@@ -113,22 +133,23 @@ def get_envelope_and_center(image, geomodel):
 
     return envelope, center
 
+with col2:
+    st.markdown(("#### Step 2: Launch CARS"))
+    # run cars
+    if st.button("Run CARS"):
+        if None not in [image1, image2, geomodel1, geomodel2]:
+            envelope_and_center1 = get_envelope_and_center(image1, geomodel1)
+            envelope_and_center2 = get_envelope_and_center(image2, geomodel2)
+            if None not in [envelope_and_center1, envelope_and_center2]:
+                try:
+                    st.session_state["sparse"], st.session_state["dense"] = cars_sensor_to_dsm.run(image1, image2, geomodel1, geomodel2)
+                except Exception as e:
+                    st.error("CARS encountered a problem during execution")
+                    st.error(e)
+                    time.sleep(10)
 
-# run cars
-if st.button("Run CARS"):
-    if None not in [image1, image2, geomodel1, geomodel2]:
-        envelope_and_center1 = get_envelope_and_center(image1, geomodel1)
-        envelope_and_center2 = get_envelope_and_center(image2, geomodel2)
-        if None not in [envelope_and_center1, envelope_and_center2]:
-            try:
-                st.session_state["sparse"], st.session_state["dense"] = cars_sensor_to_dsm.run(image1, image2, geomodel1, geomodel2)
-            except Exception as e:
-                st.error("CARS encountered a problem during execution")
-                st.error(e)
-                time.sleep(10)
-
-    else:
-        st.warning("Select the dataset first", icon="⚠️")
+        else:
+            st.warning("Select the dataset first", icon="⚠️")
 
 # map
 def create_map_drawing_envelopes(show):
@@ -424,7 +445,7 @@ def show_rasterization(pipeline):
     #     st_data = st_folium(m, height=500, width=500)
 
     else:
-        st.warning("Clic on \"Run CARS\" before", icon="⚠️")
+        st.warning("Click on \"Run CARS\" before", icon="⚠️")
 
 from st_clickable_images import clickable_images
 
@@ -432,11 +453,12 @@ url_images = "https://raw.githubusercontent.com/CNES/cars/master/docs/source/ima
 steps = ["images", "resampling", "matching", "triangulation", "rasterization"]
 url_steps = [url_images + ".".join(["dense", step, "drawio.png"]) for step in steps]
 
-st.markdown(("#### Dense pipeline"))
+st.markdown(("#### Step 3: Click on pipeline steps (clickable images):"))
+st.markdown(("##### Dense pipeline"))
 
-col1, col2 = st.columns([1, 3])
+col3, col4 = st.columns([1, 3])
 
-with col1:
+with col3:
     dense_clicked = clickable_images(
         paths=url_steps,
         titles=steps,
@@ -444,7 +466,7 @@ with col1:
         key="dense clickable"
     )
 
-with col2:
+with col4:
     if dense_clicked in [-1, 0]:
         if None not in [image1, image2, geomodel1, geomodel2]:
             show_images("dense images")
@@ -457,13 +479,13 @@ with col2:
         else:
             show_epipolar_images(steps[dense_clicked], "dense")
     else:
-        st.warning("Clic on \"Run CARS\" before", icon="⚠️")
+        st.warning("Click on \"Run CARS\" before", icon="⚠️")
 
-st.markdown(("#### Sparse pipeline"))
+st.markdown(("##### Sparse pipeline"))
 
-col1, col2 = st.columns([1, 3])
+col5, col6 = st.columns([1, 3])
 
-with col1:
+with col5:
     sparse_clicked = clickable_images(
         paths=url_steps,
         titles=steps,
@@ -471,7 +493,7 @@ with col1:
         key="sparse clickable"
     )
 
-with col2:
+with col6:
     if sparse_clicked in [-1, 0]:
         if None not in [image1, image2, geomodel1, geomodel2]:
             show_images("sparse images")
@@ -488,4 +510,4 @@ with col2:
         elif sparse_clicked == 4:
             show_rasterization("sparse")
     else:
-        st.warning("Clic on \"Run CARS\" before", icon="⚠️")
+        st.warning("Click on \"Run CARS\" before", icon="⚠️")
