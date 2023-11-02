@@ -62,8 +62,6 @@ def run(image1, image2, geomodel1, geomodel2):
 
     my_bar = st.progress(0, text="Download SRTM")
     tempdir = tempfile.mkdtemp()
-    mycwd = os.getcwd()
-    os.chdir(tempdir)
 
     # get srtm tile
     shareloc_img = sImage(temp_image1)
@@ -78,11 +76,11 @@ def run(image1, image2, geomodel1, geomodel2):
 
     srtm = get_srtm_tif_name(center[1], center[0])
     r = requests.get(srtm)
-    srtm_bn = os.path.basename(srtm)
-    srtm_tif = os.path.splitext(srtm_bn)[0]+".tif"
-    open(srtm_bn, "wb").write(r.content)
-    with zipfile.ZipFile(srtm_bn, "r") as zf:
-        zf.extract(srtm_tif)
+    srtm_arc = os.path.join(tempdir, os.path.basename(srtm))
+    srtm_tif = os.path.splitext(srtm_arc)[0]+".tif"
+    open(srtm_arc, "wb").write(r.content)
+    with zipfile.ZipFile(srtm_arc, "r") as zf:
+        zf.extractall(path=tempdir)
 
     # Import external plugins
     import_plugins()
@@ -290,7 +288,6 @@ def run(image1, image2, geomodel1, geomodel2):
 
     shutil.rmtree(tempdir, ignore_errors=True)
     my_bar.empty()
-    os.chdir(mycwd)
 
     remove_temp_data(image1, temp_image1)
     remove_temp_data(image2, temp_image2)
