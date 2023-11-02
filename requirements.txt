@@ -5,3 +5,4 @@ folium
 cars
 st-clickable-images
 localtileserver
+plotly

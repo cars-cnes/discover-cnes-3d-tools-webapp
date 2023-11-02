@@ -17,6 +17,9 @@ import requests
 import tempfile
 
 import cars_sensor_to_dsm
+import plotly.graph_objects as go
+import plotly.express as px
+import pandas as pd
 # from localtileserver import get_folium_tile_layer, TileClient
 
 MINI_LOGO ="https://raw.githubusercontent.com/CNES/cars/master/docs/source/images/picto_transparent_mini.png"
@@ -118,7 +121,7 @@ if st.button("Run CARS"):
         envelope_and_center2 = get_envelope_and_center(image2, geomodel2)
         if None not in [envelope_and_center1, envelope_and_center2]:
             try:
-                st.session_state["outdata"] = cars_sensor_to_dsm.run(image1, image2, geomodel1, geomodel2)
+                st.session_state["sparse"], st.session_state["dense"] = cars_sensor_to_dsm.run(image1, image2, geomodel1, geomodel2)
             except Exception as e:
                 st.error("CARS encountered a problem during execution")
                 st.error(e)
@@ -151,12 +154,12 @@ def create_map_drawing_envelopes(show):
 
     return m
 
-def show_images():
+def show_images(key):
     m = create_map_drawing_envelopes(show=True)
 
     if m is not None:
         folium.LayerControl().add_to(m)
-        st_data = st_folium(m, height=500, width=500)
+        st_folium(m, height=500, width=500, key=key)
 
 def enhance(array, nodata):
     array[array == nodata] = np.nan
@@ -201,10 +204,12 @@ def save_data(cars_ds,
     # close descriptor
     desc.close()
 
-def show_epipolar_images(step):
-    outdata = st.session_state["outdata"]
+
+def show_epipolar_images(step, pipeline):
+    outdata = st.session_state[pipeline]
+
     option = st.selectbox(
-        'Choose image', outdata[step].keys())
+        'Choose image', outdata[step].keys(), key=pipeline+" selectbox")
 
     __, temp = tempfile.mkstemp(suffix=".tif")
     carsdata = outdata[step][option]
@@ -220,13 +225,120 @@ def show_epipolar_images(step):
     st.image(im.convert("RGB"))
 
 
-def get_wgs84_dsm_file_from_carsdata(carsdata):
+def show_matches(group_size=50):
+    outdata = st.session_state["sparse"]
+    arrays = {}
+    for key in outdata["resampling"].keys():
+        __, temp = tempfile.mkstemp(suffix=".tif")
+        carsdata = outdata["resampling"][key]
+        save_data(carsdata["data"], temp,
+                  tag=carsdata["tag"],
+                  nodata=carsdata["nodata"])
+
+        with rio.open(temp) as src:
+            arrays[key] = np.moveaxis(src.read(), 0, -1)
+            arrays[key] = enhance(arrays[key], src.nodata)
+            arrays[key] = np.dstack((arrays[key],
+                                     arrays[key],
+                                     arrays[key]))
+
+        os.remove(temp)
+
+    matches_array = outdata["matching"]
+
+    # Create figure
+    fig = go.Figure()
+    left_right = np.hstack((arrays["left"], arrays["right"]))
+    fig = px.imshow(left_right, color_continuous_scale='gray')
+
+    # matches_array = np.load("matches.npy")
+    nb_matches = len(matches_array[:, 0])
+    text = list(map(lambda x: "idx: "+str(x), range(nb_matches)))
+
+    fig.add_trace(
+        go.Scatter(x=matches_array[:, 0],
+                   y=matches_array[:, 1],
+                   text=text,
+                   mode='markers',
+                   name='left keypoints')
+        )
+
+    fig.add_trace(
+        go.Scatter(x=matches_array[:, 2] + arrays["left"].shape[1],
+                   y=matches_array[:, 3],
+                   text=text,
+                   mode='markers',
+                   name='right keypoints')
+        )
+
+    nb_groups = int(np.ceil(nb_matches / group_size))
+
+    for idx in range(nb_matches):
+        if idx < nb_groups:
+            showlegend = True
+        else:
+            showlegend = False
+
+        fig.add_trace(
+            go.Scatter(
+                visible=False,
+                x=[matches_array[idx, 0],
+                   matches_array[idx, 2] + arrays["left"].shape[1]],
+                y=[matches_array[idx, 1],
+                   matches_array[idx, 3]],
+                legendgroup='it\'s a match',
+                name='it\'s a match',
+                showlegend=showlegend,
+                line_color='yellow')
+        )
+
+    for i in range(nb_matches)[0::nb_groups]:
+        fig.data[3+i].visible = True
+
+    # Create and add slider
+    steps = []
+    for i in range(nb_groups):
+        step = dict(
+            label=str(i),
+            method="update",
+            args=[{"visible": 3*[True] + (len(fig.data)-1) * [False]},
+                  {"title": "Match group: " + str(i)}],  # layout attribute
+        )
+        for j in range(nb_matches)[i::nb_groups]:
+            step["args"][0]["visible"][3+j] = True  # Toggle i'th trace to "visible"
+        steps.append(step)
+
+    sliders = [dict(
+        active=0,
+        currentvalue={"prefix": "Group: "},
+        pad={"t": 50},
+        steps=steps
+    )]
+
+    fig.update_layout(
+        legend=dict(
+            orientation="h",
+            yanchor="bottom",
+            y=1.02,
+            xanchor="right",
+            x=1),
+        sliders=sliders
+    )
+
+    st.plotly_chart(fig, use_container_width=True)
+
+def get_wgs84_dsm_file_from_carsdata(carsdata, pipeline):
     __, temp1 = tempfile.mkstemp(suffix=".tif")
     __, temp2 = tempfile.mkstemp(suffix=".tif")
-    save_data(carsdata,
-              temp1,
-              tag="hgt",
-              nodata=-32768)
+
+    if pipeline == "dense":
+        save_data(carsdata,
+                  temp1,
+                  tag="hgt",
+                  nodata=-32768)
+    else:
+        with open(temp1, "wb") as demfile:
+            demfile.write(carsdata)
 
     dst_crs = 'EPSG:4326'
     with rio.open(temp1) as src:
@@ -253,13 +365,35 @@ def get_wgs84_dsm_file_from_carsdata(carsdata):
     os.remove(temp1)
     return temp2
 
+def show_points_cloud():
+    pc = st.session_state["sparse"]["triangulation"]
 
-def show_rasterization():
-    dsm = st.session_state["outdata"]["rasterization"]
+    pc_valid = pc[(pc["z"] < pc["z"].quantile(.99)) & \
+                  (pc["z"] > pc["z"].quantile(.01))]
+
+    marker = dict(size=3,
+                  color=pc_valid["z"],
+                  colorscale='Viridis',
+                  opacity=0.8)
+
+    scene = dict(aspectmode='data')
+
+    fig = go.Figure(data=[go.Scatter3d(x=pc_valid["x"],
+                                       y=pc_valid["y"],
+                                       z=pc_valid["z"],
+                                       mode='markers',
+                                       marker=marker)],
+                    layout=go.Layout(scene=scene))
+
+    st.plotly_chart(fig, use_container_width=True)
+
+
+def show_rasterization(pipeline):
+    dsm = st.session_state[pipeline]["rasterization"]
     m = create_map_drawing_envelopes(show=False)
 
     if m is not None:
-        temp = get_wgs84_dsm_file_from_carsdata(dsm)
+        temp = get_wgs84_dsm_file_from_carsdata(dsm, pipeline)
 
         with rio.open(temp) as src:
             array = np.moveaxis(src.read(), 0, -1)
@@ -298,26 +432,60 @@ url_images = "https://raw.githubusercontent.com/CNES/cars/master/docs/source/ima
 steps = ["images", "resampling", "matching", "triangulation", "rasterization"]
 url_steps = [url_images + ".".join(["dense", step, "drawio.png"]) for step in steps]
 
+st.markdown(("#### Dense pipeline"))
+
 col1, col2 = st.columns([1, 3])
 
 with col1:
-    clicked = clickable_images(
+    dense_clicked = clickable_images(
         paths=url_steps,
         titles=steps,
-        img_style={"width": "220%"}
+        img_style={"width": "220%"},
+        key="dense clickable"
     )
 
 with col2:
-    if clicked in [-1, 0]:
+    if dense_clicked in [-1, 0]:
         if None not in [image1, image2, geomodel1, geomodel2]:
-            show_images()
+            show_images("dense images")
         else:
             st.warning("Select the dataset first", icon="⚠️")
 
-    elif "outdata" in st.session_state:
-        if clicked == 4:
-            show_rasterization()
+    elif "dense" in st.session_state:
+        if dense_clicked == 4:
+            show_rasterization("dense")
         else:
-            show_epipolar_images(steps[clicked])
+            show_epipolar_images(steps[dense_clicked], "dense")
+    else:
+        st.warning("Clic on \"Run CARS\" before", icon="⚠️")
+
+st.markdown(("#### Sparse pipeline"))
+
+col1, col2 = st.columns([1, 3])
+
+with col1:
+    sparse_clicked = clickable_images(
+        paths=url_steps,
+        titles=steps,
+        img_style={"width": "220%"},
+        key="sparse clickable"
+    )
+
+with col2:
+    if sparse_clicked in [-1, 0]:
+        if None not in [image1, image2, geomodel1, geomodel2]:
+            show_images("sparse images")
+        else:
+            st.warning("Select the dataset first", icon="⚠️")
+
+    elif "sparse" in st.session_state:
+        if sparse_clicked == 1:
+            show_epipolar_images("resampling", "sparse")
+        elif sparse_clicked == 2:
+            show_matches()
+        elif sparse_clicked == 3:
+            show_points_cloud()
+        elif sparse_clicked == 4:
+            show_rasterization("sparse")
     else:
         st.warning("Clic on \"Run CARS\" before", icon="⚠️")

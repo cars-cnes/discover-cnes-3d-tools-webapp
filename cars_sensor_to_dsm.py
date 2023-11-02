@@ -58,7 +58,8 @@ def run(image1, image2, geomodel1, geomodel2):
     temp_geomodel1 = get_temp_data(geomodel1)
     temp_geomodel2 = get_temp_data(geomodel2)
 
-    outdata = {}
+    sparse_outdata = {}
+    dense_outdata = {}
 
     my_bar = st.progress(0, text="Download SRTM")
     tempdir = tempfile.mkdtemp()
@@ -111,7 +112,7 @@ def run(image1, image2, geomodel1, geomodel2):
     epipolar_grid_generation_application = Application("grid_generation")
     resampling_application = Application("resampling")
     sparse_matching_application = Application("sparse_matching")
-    dem_generation_application = Application("dem_generation")
+    dem_generation_application = Application("dem_generation", cfg={"margin": 90})
     dense_matching_application = Application("dense_matching")
     triangulation_application = Application("triangulation")
     pc_fusion_application = Application("point_cloud_fusion")
@@ -125,6 +126,7 @@ def run(image1, image2, geomodel1, geomodel2):
         sensors_inputs.generate_inputs(inputs,
                                        geom_plugin_without_dem_and_geoid)[0]
     geom_plugin = geom_plugin_with_dem_and_geoid
+
     if inputs["initial_elevation"] is None:
         geom_plugin = geom_plugin_without_dem_and_geoid
 
@@ -145,6 +147,8 @@ def run(image1, image2, geomodel1, geomodel2):
         margins=sparse_matching_application.get_margins()
     )
 
+    sparse_outdata["resampling"] = {"left": {"data": epipolar_image_left, "tag": "im", "nodata": 0}, "right": {"data": epipolar_image_right, "tag": "im", "nodata": 0}}
+
     my_bar.progress(10, text="Sparse pipeline: matching")
     epipolar_matches_left, _ = sparse_matching_application.run(
         epipolar_image_left,
@@ -155,6 +159,8 @@ def run(image1, image2, geomodel1, geomodel2):
 
     matches_array = sparse_matching_application.filter_matches(epipolar_matches_left,
                                                                orchestrator=cars_orchestrator)
+
+    sparse_outdata["matching"] = matches_array
 
     grid_correction_coef, corrected_matches_array, _, _, _ = \
         grid_correction.estimate_right_grid_correction(matches_array, grid_right)
@@ -173,6 +179,18 @@ def run(image1, image2, geomodel1, geomodel2):
         corrected_matches_array,
         geometry_plugin=geom_plugin,
     )
+
+    sparse_outdata["triangulation"] = triangulated_matches
+
+    dem = dem_generation_application.run(
+        [triangulated_matches],
+        tempdir
+    )
+
+    with open(dem.attributes["dem_mean_path"], 'rb') as demfile:
+        dem_data = demfile.read()
+
+    sparse_outdata["rasterization"] = dem_data
 
     dmin, dmax = sparse_matching_tools.compute_disp_min_disp_max(
         triangulated_matches,
@@ -206,7 +224,7 @@ def run(image1, image2, geomodel1, geomodel2):
         add_color=True,
     )
 
-    outdata["resampling"] = {"left": {"data": new_epipolar_image_left, "tag": "im", "nodata": 0}, "right": {"data": new_epipolar_image_right, "tag": "im", "nodata": 0}}
+    dense_outdata["resampling"] = {"left": {"data": new_epipolar_image_left, "tag": "im", "nodata": 0}, "right": {"data": new_epipolar_image_right, "tag": "im", "nodata": 0}}
 
     my_bar.progress(30, text="Dense pipeline: matching")
     epipolar_disparity_map = dense_matching_application.run(
@@ -217,7 +235,7 @@ def run(image1, image2, geomodel1, geomodel2):
         disp_max=disp_max,
     )
 
-    outdata["matching"] = {"disp": {"data": epipolar_disparity_map, "tag": "disp", "nodata": 0}}
+    dense_outdata["matching"] = {"disp": {"data": epipolar_disparity_map, "tag": "disp", "nodata": 0}}
 
     epsg = preprocessing.compute_epsg(
         sensor_image_left,
@@ -229,7 +247,6 @@ def run(image1, image2, geomodel1, geomodel2):
         disp_min=disp_min,
         disp_max=disp_max
     )
-
 
     my_bar.progress(80, text="Dense pipeline: triangulation")
     epipolar_points_cloud = triangulation_application.run(
@@ -248,7 +265,7 @@ def run(image1, image2, geomodel1, geomodel2):
         disp_max=disp_max,
     )
 
-    outdata["triangulation"] = {"x": {"data": epipolar_points_cloud, "tag": "x", "nodata": np.nan}, "y": {"data": epipolar_points_cloud, "tag": "y", "nodata": np.nan}, "z": {"data": epipolar_points_cloud, "tag": "z", "nodata": np.nan}}
+    dense_outdata["triangulation"] = {"x": {"data": epipolar_points_cloud, "tag": "x", "nodata": np.nan}, "y": {"data": epipolar_points_cloud, "tag": "y", "nodata": np.nan}, "z": {"data": epipolar_points_cloud, "tag": "z", "nodata": np.nan}}
 
     current_terrain_roi_bbox = preprocessing.compute_terrain_bbox(
         sensor_image_left,
@@ -284,7 +301,7 @@ def run(image1, image2, geomodel1, geomodel2):
         orchestrator=cars_orchestrator
     )
 
-    outdata["rasterization"] = dsm
+    dense_outdata["rasterization"] = dsm
 
     shutil.rmtree(tempdir, ignore_errors=True)
     my_bar.empty()
@@ -294,4 +311,4 @@ def run(image1, image2, geomodel1, geomodel2):
     remove_temp_data(geomodel1, temp_geomodel1)
     remove_temp_data(geomodel2, temp_geomodel2)
 
-    return outdata
+    return sparse_outdata, dense_outdata
