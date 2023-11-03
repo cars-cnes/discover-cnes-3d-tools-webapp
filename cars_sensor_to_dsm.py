@@ -200,7 +200,6 @@ def run(image1, image2, geomodel1, geomodel2):
         ),
         disp_to_alt_ratio=grid_left.attributes["disp_to_alt_ratio"]
     )
-
     my_bar.progress(20, text="Dense pipeline: resampling")
     dense_matching_margins, disp_min, disp_max = dense_matching_application.get_margins(
         grid_left, disp_min=dmin, disp_max=dmax)

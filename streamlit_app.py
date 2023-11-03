@@ -58,23 +58,28 @@ if data_select == "Upload your own data":
     image2 = uploaded_dict[st.selectbox("Image 2", choices)]
     geomodel1 = uploaded_dict[st.selectbox("Geomodel 1", choices)]
     geomodel2 = uploaded_dict[st.selectbox("Geomodel 2", choices)]
+    dsm_out = "dsm_with_your_own_data.tif"
 
 elif data_select == "Pyramids":
     image1 = os.path.abspath("demo/img1.tif")
     image2 = os.path.abspath("demo/img2.tif")
     geomodel1 = os.path.abspath("demo/img1.geom")
     geomodel2 = os.path.abspath("demo/img2.geom")
+    dsm_out = "dsm_pyramids.tif"
 
 elif data_select == "Turkey pre-event":
     image1 = os.path.abspath("demo/pre_event_img1.tif")
     image2 = os.path.abspath("demo/pre_event_img2.tif")
     geomodel1 = os.path.abspath("demo/pre_event_img1.geom")
     geomodel2 = os.path.abspath("demo/pre_event_img2.geom")
+    dsm_out = "dsm_turkey_pre_event.tif"
+
 elif data_select == "Turkey post-event":
     image1 = os.path.abspath("demo/post_event_img1.tif")
     image2 = os.path.abspath("demo/post_event_img2.tif")
     geomodel1 = os.path.abspath("demo/post_event_img1.geom")
     geomodel2 = os.path.abspath("demo/post_event_img2.geom")
+    dsm_out = "dsm_turkey_post_event.tif"
 
 def get_envelope_and_center(image, geomodel):
     if isinstance(image, str) is False:
@@ -133,6 +138,38 @@ def get_envelope_and_center(image, geomodel):
 
     return envelope, center
 
+
+def save_data(cars_ds,
+              file_name,
+              tag,
+              dtype="float32",
+              nodata=-9999):
+
+    # create descriptor
+    desc = None
+
+    # Save tiles
+    for row in range(cars_ds.shape[0]):
+        for col in range(cars_ds.shape[1]):
+            if cars_ds[row, col] is not None:
+                if desc is None:
+                    desc = cars_ds.generate_descriptor(
+                        cars_ds[row, col],
+                        file_name,
+                        tag=tag,
+                        dtype=dtype,
+                        nodata=nodata,
+                    )
+                cars_ds.run_save(
+                    cars_ds[row, col],
+                    file_name,
+                    tag=tag,
+                    descriptor=desc,
+                )
+
+    # close descriptor
+    desc.close()
+
 with col2:
     st.markdown(("#### Step 2: Launch CARS"))
     # run cars
@@ -147,9 +184,18 @@ with col2:
                     st.error("CARS encountered a problem during execution")
                     st.error(e)
                     time.sleep(10)
-
         else:
             st.warning("Select the dataset first", icon="⚠️")
+
+    if "dense" in st.session_state:
+        __, temp = tempfile.mkstemp(suffix=".tif")
+        dsm_data = st.session_state["dense"]["rasterization"]
+        save_data(dsm_data, temp, tag="hgt", nodata=-32768)
+        with open(temp, "rb") as dsm_file:
+            st.download_button("Download DSM",
+                               data=dsm_file,
+                               file_name=dsm_out)
+        os.remove(temp)
 
 # map
 def create_map_drawing_envelopes(show):
@@ -193,37 +239,6 @@ def enhance(array, nodata):
     array[array < 0] = 0
     array = np.nan_to_num(array, nan=255)
     return array.astype(np.uint8)
-
-def save_data(cars_ds,
-              file_name,
-              tag,
-              dtype="float32",
-              nodata=-9999):
-
-    # create descriptor
-    desc = None
-
-    # Save tiles
-    for row in range(cars_ds.shape[0]):
-        for col in range(cars_ds.shape[1]):
-            if cars_ds[row, col] is not None:
-                if desc is None:
-                    desc = cars_ds.generate_descriptor(
-                        cars_ds[row, col],
-                        file_name,
-                        tag=tag,
-                        dtype=dtype,
-                        nodata=nodata,
-                    )
-                cars_ds.run_save(
-                    cars_ds[row, col],
-                    file_name,
-                    tag=tag,
-                    descriptor=desc,
-                )
-
-    # close descriptor
-    desc.close()
 
 
 def show_epipolar_images(step, pipeline):
@@ -453,7 +468,7 @@ url_images = "https://raw.githubusercontent.com/CNES/cars/master/docs/source/ima
 steps = ["images", "resampling", "matching", "triangulation", "rasterization"]
 url_steps = [url_images + ".".join(["dense", step, "drawio.png"]) for step in steps]
 
-st.markdown(("#### Step 3: Click on pipeline steps (clickable images):"))
+st.markdown(("#### Step 3: Click on pipeline steps to see intermediate results"))
 st.markdown(("##### Dense pipeline"))
 
 col3, col4 = st.columns([1, 3])
