@@ -52,31 +52,32 @@ if data_select == "Upload your own data":
         choices.append(uploaded.name)
         uploaded_dict[uploaded.name] = uploaded
 
-    image1 = uploaded_dict[st.selectbox("Image 1", choices)]
-    image2 = uploaded_dict[st.selectbox("Image 2", choices)]
     geomodel1 = uploaded_dict[st.selectbox("Geomodel 1", choices)]
+    image1 = uploaded_dict[st.selectbox("Image 1", choices)]
     geomodel2 = uploaded_dict[st.selectbox("Geomodel 2", choices)]
+    image2 = uploaded_dict[st.selectbox("Image 2", choices)]
+
     dsm_out = "dsm_with_your_own_data.tif"
 
 elif data_select == "Pyramids":
-    image1 = os.path.abspath("demo/img1.tif")
-    image2 = os.path.abspath("demo/img2.tif")
     geomodel1 = os.path.abspath("demo/img1.geom")
+    image1 = os.path.abspath("demo/img1.tif")
     geomodel2 = os.path.abspath("demo/img2.geom")
+    image2 = os.path.abspath("demo/img2.tif")
     dsm_out = "dsm_pyramids.tif"
 
 elif data_select == "Turkey pre-event":
-    image1 = os.path.abspath("demo/pre_event_img1.tif")
-    image2 = os.path.abspath("demo/pre_event_img2.tif")
     geomodel1 = os.path.abspath("demo/pre_event_img1.geom")
+    image1 = os.path.abspath("demo/pre_event_img1.tif")
     geomodel2 = os.path.abspath("demo/pre_event_img2.geom")
+    image2 = os.path.abspath("demo/pre_event_img2.tif")
     dsm_out = "dsm_turkey_pre_event.tif"
 
 elif data_select == "Turkey post-event":
-    image1 = os.path.abspath("demo/post_event_img1.tif")
-    image2 = os.path.abspath("demo/post_event_img2.tif")
     geomodel1 = os.path.abspath("demo/post_event_img1.geom")
+    image1 = os.path.abspath("demo/post_event_img1.tif")
     geomodel2 = os.path.abspath("demo/post_event_img2.geom")
+    image2 = os.path.abspath("demo/post_event_img2.tif")
     dsm_out = "dsm_turkey_post_event.tif"
 
 def get_envelope_and_center(image, geomodel):
