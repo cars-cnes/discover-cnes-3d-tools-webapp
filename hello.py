@@ -32,10 +32,10 @@ with left:
 with right:
     st.subheader("CO3D, A constellation to map the world in 3D")
     st.markdown("""
-    - CESBIO Website: https://labo.obs-mip.fr/multitemp/co3d-the-very-high-resolution-mission-dedicated-to-3d/
-    - CNES Website: https://co3d.cnes.fr/en/co3d-0
+    - CESBIO website: https://labo.obs-mip.fr/multitemp/co3d-the-very-high-resolution-mission-dedicated-to-3d/
+    - CNES website: https://co3d.cnes.fr/en/co3d-0
     - eoPortal article: https://www.eoportal.org/satellite-missions/co3d-constellation#space-and-hardware-components
-    - ISPRS Article: https://isprs-archives.copernicus.org/articles/XLIII-B1-2020/299/2020/isprs-archives-XLIII-B1-2020-299-2020.pdf
+    - ISPRS article: https://isprs-archives.copernicus.org/articles/XLIII-B1-2020/299/2020/isprs-archives-XLIII-B1-2020-299-2020.pdf
     """)
 
 PICTO_CARS = "https://raw.githubusercontent.com/CNES/cars/master/docs/source/images/picto_transparent_mini.png"
