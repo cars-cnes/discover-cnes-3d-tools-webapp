@@ -100,7 +100,7 @@ def get_envelope_and_center(image, geomodel):
     try:
         shareloc_img = sImage(temp_image)
     except rio.errors.RasterioIOError:
-        st.warning(image.name + " is not a correct image")
+        st.warning(image.name + " is not a correct image", icon="⚠️")
         if isinstance(image, str) is False:
             os.remove(temp_image)
         return None
@@ -108,7 +108,7 @@ def get_envelope_and_center(image, geomodel):
     try:
         shareloc_mdl = RPC.from_any(temp_geomodel)
     except ValueError:
-        st.warning(geomodel.name + " is not a correct geomodel")
+        st.warning(geomodel.name + " is not a correct geomodel", icon="⚠️")
         if isinstance(geomodel, str) is False:
             os.remove(temp_geomodel)
         return None
