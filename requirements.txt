@@ -3,6 +3,4 @@ shareloc
 streamlit-folium
 folium
 cars
-st-clickable-images
-localtileserver
 plotly

@@ -34,16 +34,13 @@ with left:
 with right:
     st.markdown("<h1 style='text-align: center;'>CARS, a satellite multi view stereo framework</h1>", unsafe_allow_html=True)
 
-col1, col2 = st.columns([1, 1])
-
-with col1:
-    st.header("1. Select the dataset")
-    data_select = st.radio("Select the dataset",
-                           ["Pyramids",
-                            "Turkey pre-event",
-                            "Turkey post-event",
-                            "Upload your own data"],
-                           label_visibility="collapsed")
+st.header("1. Select the dataset")
+data_select = st.radio("Select the dataset",
+                       ["Pyramids",
+                        "Turkey pre-event",
+                        "Turkey post-event",
+                        "Upload your own data"],
+                       label_visibility="collapsed")
 
 if data_select == "Upload your own data":
     uploaded_files = st.file_uploader("or upload your own data",
@@ -140,6 +137,40 @@ def get_envelope_and_center(image, geomodel):
     return envelope, center
 
 
+# map
+def create_map_drawing_envelopes(show):
+    def draw_envelope(name, image, geomodel, color, m=None):
+        envelope_and_center = get_envelope_and_center(image, geomodel)
+        if envelope_and_center is not None:
+            envelope, center = envelope_and_center
+            if m is None:
+                m = folium.Map(location=(center[1], center[0]),
+                               zoom_start=16)
+
+            fg = folium.FeatureGroup(name=name, show=show)
+            m.add_child(fg)
+            folium.Polygon(envelope[:, :2][:, [1, 0]],
+                           color=color,
+                           fill_color=color,
+                           opacity=0.1,
+                           tooltip=name).add_to(fg)
+        return m
+
+    m = draw_envelope("image1", image1, geomodel1, "blue")
+    m = draw_envelope("image2", image2, geomodel2, "red", m)
+
+    return m
+
+def show_images():
+    m = create_map_drawing_envelopes(show=True)
+
+    if m is not None:
+        folium.LayerControl().add_to(m)
+        st_folium(m, height=500, width=500)
+
+if None not in [image1, image2, geomodel1, geomodel2]:
+    show_images()
+
 def save_data(cars_ds,
               file_name,
               tag,
@@ -171,63 +202,31 @@ def save_data(cars_ds,
     # close descriptor
     desc.close()
 
-with col2:
-    st.header("2. Launch CARS")
-    # run cars
-    if st.button("Run CARS"):
-        if None not in [image1, image2, geomodel1, geomodel2]:
-            envelope_and_center1 = get_envelope_and_center(image1, geomodel1)
-            envelope_and_center2 = get_envelope_and_center(image2, geomodel2)
-            if None not in [envelope_and_center1, envelope_and_center2]:
-                try:
-                    st.session_state["sparse"], st.session_state["dense"] = cars_steps.run(image1, image2, geomodel1, geomodel2)
-                except Exception as e:
-                    st.error("CARS encountered a problem during execution")
-                    st.error(e)
-                    time.sleep(10)
-        else:
-            st.warning("Select the dataset first", icon="⚠️")
+st.header("2. Launch CARS")
+# run cars
+if st.button("Run CARS"):
+    if None not in [image1, image2, geomodel1, geomodel2]:
+        envelope_and_center1 = get_envelope_and_center(image1, geomodel1)
+        envelope_and_center2 = get_envelope_and_center(image2, geomodel2)
+        if None not in [envelope_and_center1, envelope_and_center2]:
+            try:
+                st.session_state["sparse"], st.session_state["dense"] = cars_steps.run(image1, image2, geomodel1, geomodel2)
+            except Exception as e:
+                st.error("CARS encountered a problem during execution")
+                st.error(e)
+                time.sleep(10)
+    else:
+        st.warning("Select the dataset first", icon="⚠️")
 
-    if "dense" in st.session_state:
-        __, temp = tempfile.mkstemp(suffix=".tif")
-        dsm_data = st.session_state["dense"]["rasterization"]
-        save_data(dsm_data, temp, tag="hgt", nodata=-32768)
-        with open(temp, "rb") as dsm_file:
-            st.download_button("Download DSM",
-                               data=dsm_file,
-                               file_name=dsm_out)
-        os.remove(temp)
-
-# map
-def create_map_drawing_envelopes(show):
-    def draw_envelope(name, image, geomodel, color, m=None):
-        envelope_and_center = get_envelope_and_center(image, geomodel)
-        if envelope_and_center is not None:
-            envelope, center = envelope_and_center
-            if m is None:
-                m = folium.Map(location=(center[1], center[0]),
-                               zoom_start=16)
-
-            fg = folium.FeatureGroup(name=name, show=show)
-            m.add_child(fg)
-            folium.Polygon(envelope[:, :2][:, [1, 0]],
-                           color=color,
-                           fill_color=color,
-                           opacity=0.1,
-                           tooltip=name).add_to(fg)
-        return m
-
-    m = draw_envelope("image1", image1, geomodel1, "blue")
-    m = draw_envelope("image2", image2, geomodel2, "red", m)
-
-    return m
-
-def show_images(key):
-    m = create_map_drawing_envelopes(show=True)
-
-    if m is not None:
-        folium.LayerControl().add_to(m)
-        st_folium(m, height=500, width=500, key=key)
+if "dense" in st.session_state:
+    __, temp = tempfile.mkstemp(suffix=".tif")
+    dsm_data = st.session_state["dense"]["rasterization"]
+    save_data(dsm_data, temp, tag="hgt", nodata=-32768)
+    with open(temp, "rb") as dsm_file:
+        st.download_button("Download DSM",
+                           data=dsm_file,
+                           file_name=dsm_out)
+    os.remove(temp)
 
 def enhance(array, nodata):
     array[array == nodata] = np.nan
@@ -463,67 +462,42 @@ def show_rasterization(pipeline):
     else:
         st.warning("Click on \"Run CARS\" before", icon="⚠️")
 
-from st_clickable_images import clickable_images
+steps = ["resampling", "matching", "triangulation", "rasterization"]
 
-url_images = "https://raw.githubusercontent.com/CNES/cars/master/docs/source/images/"
-steps = ["images", "resampling", "matching", "triangulation", "rasterization"]
-url_steps = [url_images + ".".join(["dense", step, "drawio.png"]) for step in steps]
+st.header("3. See intermediate results")
 
-st.header("3. Click on steps to see intermediate results")
-st.subheader("Dense pipeline")
+st.subheader("Select the sparse pipeline step 👇")
 
-col3, col4 = st.columns([1, 3])
+sparse_step = st.radio(
+    "Select the sparse pipeline step 👇",
+    steps, horizontal=True,
+    label_visibility="collapsed"
+)
 
-with col3:
-    dense_clicked = clickable_images(
-        paths=url_steps,
-        titles=steps,
-        img_style={"width": "220%"},
-        key="dense clickable"
-    )
-
-with col4:
-    if dense_clicked in [-1, 0]:
-        if None not in [image1, image2, geomodel1, geomodel2]:
-            show_images("dense images")
-        else:
-            st.warning("Select the dataset first", icon="⚠️")
-
-    elif "dense" in st.session_state:
-        if dense_clicked == 4:
-            show_rasterization("dense")
-        else:
-            show_epipolar_images(steps[dense_clicked], "dense")
+if "sparse" in st.session_state:
+    if sparse_step == "resampling":
+        show_epipolar_images("resampling", "sparse")
+    elif sparse_step == "matching":
+        show_matches()
+    elif sparse_step == "triangulation":
+        show_points_cloud()
     else:
-        st.warning("Click on \"Run CARS\" before", icon="⚠️")
+        show_rasterization("sparse")
+else:
+    st.warning("Click on \"Run CARS\" before", icon="⚠️")
 
-st.subheader("Sparse pipeline")
+st.subheader("Select the dense pipeline step 👇")
 
-col5, col6 = st.columns([1, 3])
+dense_step = st.radio(
+    "Select the dense pipeline step 👇",
+    steps, horizontal=True,
+    label_visibility="collapsed"
+)
 
-with col5:
-    sparse_clicked = clickable_images(
-        paths=url_steps,
-        titles=steps,
-        img_style={"width": "220%"},
-        key="sparse clickable"
-    )
-
-with col6:
-    if sparse_clicked in [-1, 0]:
-        if None not in [image1, image2, geomodel1, geomodel2]:
-            show_images("sparse images")
-        else:
-            st.warning("Select the dataset first", icon="⚠️")
-
-    elif "sparse" in st.session_state:
-        if sparse_clicked == 1:
-            show_epipolar_images("resampling", "sparse")
-        elif sparse_clicked == 2:
-            show_matches()
-        elif sparse_clicked == 3:
-            show_points_cloud()
-        elif sparse_clicked == 4:
-            show_rasterization("sparse")
+if "dense" in st.session_state:
+    if dense_step in ["resampling", "triangulation", "matching"]:
+        show_epipolar_images(dense_step, "dense")
     else:
-        st.warning("Click on \"Run CARS\" before", icon="⚠️")
+        show_rasterization("dense")
+else:
+    st.warning("Click on \"Run CARS\" before", icon="⚠️")
