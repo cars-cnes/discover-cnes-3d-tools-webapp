@@ -28,6 +28,7 @@ st.header("""Want to learn more?""")
 PICTO_CO3D = "https://co3d.cnes.fr/sites/default/files/drupal/202309/image/logo.jpg"
 left, right = st.columns((1, 4))
 with left:
+    st.markdown("")
     st.image(PICTO_CO3D, width=140)
 with right:
     st.subheader("CO3D, A constellation to map the world in 3D")
@@ -48,4 +49,20 @@ with right:
     - GitHub page: https://github.com/CNES/cars
     - PyPI package: https://pypi.org/project/cars/
     - ReadTheDocs documentation: https://cars.readthedocs.io/
+""")
+
+
+PICTO_BULLDO = "https://raw.githubusercontent.com/CNES/bulldozer/master/docs/source/images/bulldozer_logo.png"
+left, right = st.columns((1, 4))
+with left:
+    bulldo = '<div style="text-align: center;"><link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Audiowide"><p style="font-family:Audiowide"><img src="'+PICTO_BULLDO+'"; width=120; alt="bulldozer"> bulldozer</p></div>'
+    st.markdown("")
+    st.markdown("")
+    st.markdown(bulldo, unsafe_allow_html=True)
+
+with right:
+    st.subheader("Bulldozer, a DTM from DSM extraction tool")
+    st.markdown("""
+    - GitHub page: https://github.com/CNES/bulldozer
+    - PyPI package: https://pypi.org/project/bulldozer-dt
 """)
