@@ -16,27 +16,27 @@ import tarfile
 import requests
 import tempfile
 
-import cars_sensor_to_dsm
+import processing.cars_steps as cars_steps
 import plotly.graph_objects as go
 import plotly.express as px
 import pandas as pd
 # from localtileserver import get_folium_tile_layer, TileClient
 
-MINI_LOGO ="https://raw.githubusercontent.com/CNES/cars/master/docs/source/images/picto_transparent_mini.png"
-st.set_page_config(page_title="cars-webapp",
-                   page_icon=MINI_LOGO)
+FAVICON ="https://cnes.fr/sites/all/themes/web3/favicon.ico"
+st.set_page_config(page_title="cars-app", page_icon=FAVICON)
 
-# title
-__, center, __ = st.columns((1, 4, 1))
-with center:
-    st.markdown("![Logo]("+MINI_LOGO+")")
+PICTO_CARS = "https://raw.githubusercontent.com/CNES/cars/master/docs/source/images/picto_transparent_mini.png"
+left, right = st.columns((1, 4))
+with left:
+    st.image(PICTO_CARS)
 
-st.markdown(("## CARS, a satellite multi view stereo framework"))
+with right:
+    st.title("CARS, a satellite multi view stereo framework")
 
 col1, col2 = st.columns([1, 1])
 
 with col1:
-    st.markdown(("#### Step 1: Select the dataset"))
+    st.header("1. Select the dataset")
     data_select = st.radio("Select the dataset",
                            ["Pyramids",
                             "Turkey pre-event",
@@ -171,7 +171,7 @@ def save_data(cars_ds,
     desc.close()
 
 with col2:
-    st.markdown(("#### Step 2: Launch CARS"))
+    st.header("2. Launch CARS")
     # run cars
     if st.button("Run CARS"):
         if None not in [image1, image2, geomodel1, geomodel2]:
@@ -179,7 +179,7 @@ with col2:
             envelope_and_center2 = get_envelope_and_center(image2, geomodel2)
             if None not in [envelope_and_center1, envelope_and_center2]:
                 try:
-                    st.session_state["sparse"], st.session_state["dense"] = cars_sensor_to_dsm.run(image1, image2, geomodel1, geomodel2)
+                    st.session_state["sparse"], st.session_state["dense"] = cars_steps.run(image1, image2, geomodel1, geomodel2)
                 except Exception as e:
                     st.error("CARS encountered a problem during execution")
                     st.error(e)
@@ -468,8 +468,8 @@ url_images = "https://raw.githubusercontent.com/CNES/cars/master/docs/source/ima
 steps = ["images", "resampling", "matching", "triangulation", "rasterization"]
 url_steps = [url_images + ".".join(["dense", step, "drawio.png"]) for step in steps]
 
-st.markdown(("#### Step 3: Click on pipeline steps to see intermediate results"))
-st.markdown(("##### Dense pipeline"))
+st.header("3. Click on steps to see intermediate results")
+st.subheader("Dense pipeline")
 
 col3, col4 = st.columns([1, 3])
 
@@ -496,7 +496,7 @@ with col4:
     else:
         st.warning("Click on \"Run CARS\" before", icon="⚠️")
 
-st.markdown(("##### Sparse pipeline"))
+st.subheader("Sparse pipeline")
 
 col5, col6 = st.columns([1, 3])
 
