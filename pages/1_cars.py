@@ -28,10 +28,11 @@ st.set_page_config(page_title="cars-app", page_icon=FAVICON)
 PICTO_CARS = "https://raw.githubusercontent.com/CNES/cars/master/docs/source/images/picto_transparent_mini.png"
 left, right = st.columns((1, 4))
 with left:
-    st.image(PICTO_CARS)
+    cars = '<div style="text-align: center;"><img src="'+PICTO_CARS+'"; height=140; alt="cars"></div>'
+    st.markdown(cars, unsafe_allow_html=True)
 
 with right:
-    st.title("CARS, a satellite multi view stereo framework")
+    st.markdown("<h1 style='text-align: center;'>CARS, a satellite multi view stereo framework</h1>", unsafe_allow_html=True)
 
 col1, col2 = st.columns([1, 1])
 

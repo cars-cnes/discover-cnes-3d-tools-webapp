@@ -7,13 +7,13 @@ LOGO_CNES = "https://cnes.fr/sites/default/files/styles/large/public/drupal/2017
 LOGO_REP = "https://upload.wikimedia.org/wikipedia/fr/thumb/2/22/Republique-francaise-logo.svg/532px-Republique-francaise-logo.svg.png"
 
 # title
-left, center, right = st.columns((1, 1, 3))
+left, right = st.columns((1, 1.5))
 with left:
-    st.image(LOGO_REP, width=120)
-with center:
-    st.image(LOGO_CNES, width=100)
+    cnes = '<div style="text-align: center;"><img src="'+LOGO_REP+'"; width=120; alt="rep"><img src="'+LOGO_CNES+'"; width=100; alt="cnes"></div>'
+    st.markdown(cnes, unsafe_allow_html=True)
+
 with right:
-    st.title(("Discover CNES 3D open-source tools"))
+    st.markdown("<h1 style='text-align: center;'>Discover CNES 3D open-source tools</h1>", unsafe_allow_html=True)
 
 st.header("""In a nutshell""")
 
@@ -28,24 +28,29 @@ st.header("""Want to learn more?""")
 PICTO_CO3D = "https://co3d.cnes.fr/sites/default/files/drupal/202309/image/logo.jpg"
 left, right = st.columns((1, 4))
 with left:
-    st.markdown("")
-    st.image(PICTO_CO3D, width=140)
+    co3d = '<div style="text-align: center;"><img src="'+PICTO_CO3D+'"; height=140; alt="co3d"></div>'
+    st.markdown(co3d, unsafe_allow_html=True)
 with right:
-    st.subheader("CO3D, A constellation to map the world in 3D")
-    st.markdown("""
-    - CESBIO website: https://labo.obs-mip.fr/multitemp/co3d-the-very-high-resolution-mission-dedicated-to-3d/
-    - CNES website: https://co3d.cnes.fr/en/co3d-0
-    - eoPortal article: https://www.eoportal.org/satellite-missions/co3d-constellation#space-and-hardware-components
-    - ISPRS article: https://isprs-archives.copernicus.org/articles/XLIII-B1-2020/299/2020/isprs-archives-XLIII-B1-2020-299-2020.pdf
-    """)
+    st.markdown("")
+    st.markdown("<h3 style='text-align: center;'>CO3D, A constellation to map <br> the world in 3D</h3>", unsafe_allow_html=True)
+    st.markdown("")
+st.markdown("""
+- CNES webpage: https://co3d.cnes.fr/en/co3d-0
+- CESBIO blog: [https://labo.obs-mip.fr/.../co3d-the-very-high-resolution-mission-dedicated-to-3d/](https://labo.obs-mip.fr/multitemp/co3d-the-very-high-resolution-mission-dedicated-to-3d/)
+- CO3D mission on eoPortal: https://www.eoportal.org/satellite-missions/co3d-constellation
+- ISPRS article: https://isprs-archives.copernicus.org/articles/XLIII-B1-2020/299/2020
+""")
 
 PICTO_CARS = "https://raw.githubusercontent.com/CNES/cars/master/docs/source/images/picto_transparent_mini.png"
 left, right = st.columns((1, 4))
 with left:
-    st.image(PICTO_CARS, width=140)
+    cars = '<div style="text-align: center;"><img src="'+PICTO_CARS+'"; height=140; alt="cars"></div>'
+    st.markdown(cars, unsafe_allow_html=True)
 with right:
-    st.subheader("CARS, a satellite multi view stereo framework")
-    st.markdown("""
+    st.markdown("")
+    st.markdown("<h3 style='text-align: center;'>CARS, a satellite multi view <br> stereo framework</h3>", unsafe_allow_html=True)
+    st.markdown("")
+st.markdown("""
     - GitHub page: https://github.com/CNES/cars
     - PyPI package: https://pypi.org/project/cars/
     - ReadTheDocs documentation: https://cars.readthedocs.io/
@@ -55,14 +60,16 @@ with right:
 PICTO_BULLDO = "https://raw.githubusercontent.com/CNES/bulldozer/master/docs/source/images/bulldozer_logo.png"
 left, right = st.columns((1, 4))
 with left:
-    bulldo = '<div style="text-align: center;"><link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Audiowide"><p style="font-family:Audiowide"><img src="'+PICTO_BULLDO+'"; width=120; alt="bulldozer"> bulldozer</p></div>'
     st.markdown("")
     st.markdown("")
+    bulldo = '<div style="text-align: center; display: block;"><link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Audiowide"><p style="font-family:Audiowide"><img src="'+PICTO_BULLDO+'"; height=60; style="margin-bottom: 5px"; alt="bulldozer;"> <br> bulldozer</p></div>'
     st.markdown(bulldo, unsafe_allow_html=True)
 
 with right:
-    st.subheader("Bulldozer, a DTM from DSM extraction tool")
-    st.markdown("""
-    - GitHub page: https://github.com/CNES/bulldozer
-    - PyPI package: https://pypi.org/project/bulldozer-dt
+    st.markdown("")
+    st.markdown("<h3 style='text-align: center;'>Bulldozer, a DTM from DSM <br> extraction tool</h3>", unsafe_allow_html=True)
+    st.markdown("")
+st.markdown("""
+- GitHub page: https://github.com/CNES/bulldozer
+- PyPI package: https://pypi.org/project/bulldozer-dtm
 """)
