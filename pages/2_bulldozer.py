@@ -1,7 +1,7 @@
 import streamlit as st
 
 FAVICON ="https://cnes.fr/sites/all/themes/web3/favicon.ico"
-st.set_page_config(page_title="CNES 3D | Bulldozer,a DTM from DSM extraction tool", page_icon=FAVICON)
+st.set_page_config(page_title="CNES 3D | Bulldozer, a DTM from DSM extraction tool", page_icon=FAVICON)
 
 PICTO_BULLDO = "https://raw.githubusercontent.com/CNES/bulldozer/master/docs/source/images/bulldozer_logo.png"
 left, right = st.columns((1, 4))
