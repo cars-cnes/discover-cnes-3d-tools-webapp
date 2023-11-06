@@ -23,7 +23,7 @@ import pandas as pd
 # from localtileserver import get_folium_tile_layer, TileClient
 
 FAVICON ="https://cnes.fr/sites/all/themes/web3/favicon.ico"
-st.set_page_config(page_title="cars-app", page_icon=FAVICON)
+st.set_page_config(page_title="CNES 3D | CARS, a satellite multi view stereo framework", page_icon=FAVICON)
 
 PICTO_CARS = "https://raw.githubusercontent.com/CNES/cars/master/docs/source/images/picto_transparent_mini.png"
 left, right = st.columns((1, 4))

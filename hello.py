@@ -1,7 +1,7 @@
 import streamlit as st
 
 FAVICON ="https://cnes.fr/sites/all/themes/web3/favicon.ico"
-st.set_page_config(page_title="cnes-3d-tools", page_icon=FAVICON)
+st.set_page_config(page_title="CNES 3D | Discover CNES 3D open-source tools", page_icon=FAVICON)
 
 LOGO_CNES = "https://cnes.fr/sites/default/files/styles/large/public/drupal/201707/image/is_logo_2017_logo_carre_bleu.jpg?itok=UtsAO5qP"
 LOGO_REP = "https://upload.wikimedia.org/wikipedia/fr/thumb/2/22/Republique-francaise-logo.svg/532px-Republique-francaise-logo.svg.png"
