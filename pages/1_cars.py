@@ -22,6 +22,9 @@ import plotly.express as px
 import pandas as pd
 # from localtileserver import get_folium_tile_layer, TileClient
 
+import laspy.file
+import laspy.header
+
 FAVICON ="https://cnes.fr/sites/all/themes/web3/favicon.ico"
 st.set_page_config(page_title="CNES 3D | CARS, a satellite multi view stereo framework", page_icon=FAVICON)
 
@@ -220,14 +223,53 @@ if st.button("Run CARS"):
         st.warning("Select the dataset first", icon="⚠️")
 
 if "dense" in st.session_state:
-    __, temp = tempfile.mkstemp(suffix=".tif")
+    __, temp1 = tempfile.mkstemp(suffix=".tif")
     dsm_data = st.session_state["dense"]["rasterization"]
-    save_data(dsm_data, temp, tag="hgt", nodata=-32768)
-    with open(temp, "rb") as dsm_file:
+    save_data(dsm_data, temp1, tag="hgt", nodata=-32768)
+    with open(temp1, "rb") as dsm_file:
         st.download_button("Download DSM",
                            data=dsm_file,
                            file_name=dsm_out)
-    os.remove(temp)
+    os.remove(temp1)
+
+    __, temp2 = tempfile.mkstemp(suffix=".laz")
+    header = laspy.LasHeader(point_format=2)
+    scale_factor = 0.01
+    header.scales = [scale_factor, scale_factor, scale_factor]
+    laz = laspy.LasData(header)
+
+    pc = st.session_state["dense"]["triangulation.pc"]
+
+    # positions
+    laz.x = pc.x
+    laz.y = pc.y
+    laz.z = pc.z
+
+    # colors
+    color = pc.color_Gray.values
+    color_mean = np.mean(color)
+    color_std = np.std(color)
+    color_max = color_mean + 3*color_std
+    color_min = color_mean - 3*color_std
+    color = 65535*(color-color_min) / (color_max-color_min)
+    color[color > 65535] = 65535
+    color[color < 0] = 0
+    color = color.astype(int)
+
+    laz.red = color
+    laz.green = color
+    laz.blue = color
+
+    laz.write(temp2)
+
+    pc_out = os.path.splitext(dsm_out)[0]+".laz"
+    pc_out = "pc"+ pc_out.split("dsm")[-1]
+    with open(temp2, "rb") as pc_file:
+        st.download_button("Download Point Cloud",
+                           data=pc_file,
+                           file_name=pc_out)
+    os.remove(temp2)
+
 
 def enhance(array, nodata):
     array[array == nodata] = np.nan

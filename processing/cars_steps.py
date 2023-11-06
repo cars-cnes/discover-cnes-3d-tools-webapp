@@ -293,6 +293,8 @@ def run(image1, image2, geomodel1, geomodel2):
         optimal_terrain_tile_width=optimal_terrain_tile_width
     )
 
+    dense_outdata["triangulation.pc"] = merged_points_clouds[0][0]
+
     my_bar.progress(95, text="Dense pipeline: rasterization")
     dsm = rasterization_application.run(
         merged_points_clouds,
