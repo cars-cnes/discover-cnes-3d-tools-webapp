@@ -26,7 +26,7 @@ st.markdown("""
 st.header("""Want to learn more?""")
 
 PICTO_CO3D = "https://co3d.cnes.fr/sites/default/files/drupal/202309/image/logo.jpg"
-left, right = st.columns((1, 4))
+left, right = st.columns((2, 3))
 with left:
     co3d = '<div style="text-align: center;"><img src="'+PICTO_CO3D+'"; height=140; alt="co3d"></div>'
     st.markdown(co3d, unsafe_allow_html=True)
@@ -42,7 +42,7 @@ st.markdown("""
 """)
 
 PICTO_CARS = "https://raw.githubusercontent.com/CNES/cars/master/docs/source/images/picto_transparent_mini.png"
-left, right = st.columns((1, 4))
+left, right = st.columns((2, 3))
 with left:
     cars = '<div style="text-align: center;"><img src="'+PICTO_CARS+'"; height=140; alt="cars"></div>'
     st.markdown(cars, unsafe_allow_html=True)
@@ -58,7 +58,7 @@ st.markdown("""
 
 
 PICTO_BULLDO = "https://raw.githubusercontent.com/CNES/bulldozer/master/docs/source/images/bulldozer_logo.png"
-left, right = st.columns((1, 4))
+left, right = st.columns((2, 3))
 with left:
     st.markdown("")
     st.markdown("")
@@ -72,4 +72,37 @@ with right:
 st.markdown("""
 - GitHub page: https://github.com/CNES/bulldozer
 - PyPI package: https://pypi.org/project/bulldozer-dtm
+""")
+
+PICTO_PANDORA = "https://raw.githubusercontent.com/CNES/pandora/master/docs/source/Images/logo/logo_typo_large.png"
+left, right = st.columns((2, 3))
+with left:
+    pandora = '<div style="text-align: center;"><br><img src="'+PICTO_PANDORA+'"; height=80; alt="pandora"></div>'
+    st.markdown(pandora, unsafe_allow_html=True)
+with right:
+    st.markdown("")
+    st.markdown("<h3 style='text-align: center;'>PANDORA, a stereo matching <br> framework</h3>", unsafe_allow_html=True)
+    st.markdown("")
+st.markdown("""
+    - GitHub page: https://github.com/CNES/pandora
+    - PyPI package: https://pypi.org/project/pandora/
+    - ReadTheDocs documentation: https://pandora.readthedocs.io/
+""")
+
+PICTO_DEMCOMPARE = "https://raw.githubusercontent.com/CNES/demcompare/master/docs/source/images/demcompare_picto.png"
+left, right = st.columns((2, 3))
+with left:
+    st.markdown("")
+    demcompare = '<div style="text-align: center; display: block;"><link rel="stylesheet" href="https://fonts.googleapis.com/css?family=Orbitron"><p style="font-family:Orbitron; color:rgb(0,47,108)"><img src="'+PICTO_DEMCOMPARE+'"; height=80"; alt="demcompare;"> <br> demcompare</p></div>'
+    st.markdown(demcompare, unsafe_allow_html=True)
+
+with right:
+    st.markdown("")
+    st.markdown("<h3 style='text-align: center;'>DEMCOMPARE, a DSM / DTM <br> comparison tool</h3>", unsafe_allow_html=True)
+    st.markdown("")
+st.markdown("""
+    - GitHub page: https://github.com/CNES/demcompare
+    - PyPI package: https://pypi.org/project/demcompare/
+    - ReadTheDocs documentation: https://demcompare.readthedocs.io/
+
 """)
