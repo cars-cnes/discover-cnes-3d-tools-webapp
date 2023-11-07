@@ -35,7 +35,8 @@ def get_srtm_tif_name(lat, lon):
     tlat = 1+np.floor((60-lat)/5)
     tlat = 24 if tlat == 25 else tlat
 
-    srtm = "https://srtm.csi.cgiar.org/wp-content/uploads/files/srtm_5x5/TIFF/srtm_%02d_%02d.zip" % (tlon, tlat)
+    srtm = "https://download.esa.int/step/auxdata/dem/SRTM90/tiff/srtm_%02d_%02d.zip" % (tlon, tlat)
+    # srtm = "https://srtm.csi.cgiar.org/wp-content/uploads/files/srtm_5x5/TIFF/srtm_%02d_%02d.zip" % (tlon, tlat)
     return srtm
 
 def get_temp_data(data):
@@ -76,12 +77,16 @@ def run(image1, image2, geomodel1, geomodel2):
                         using_geotransform=True)[0]
 
     srtm = get_srtm_tif_name(center[1], center[0])
-    r = requests.get(srtm)
     srtm_arc = os.path.join(tempdir, os.path.basename(srtm))
     srtm_tif = os.path.splitext(srtm_arc)[0]+".tif"
-    open(srtm_arc, "wb").write(r.content)
-    with zipfile.ZipFile(srtm_arc, "r") as zf:
-        zf.extractall(path=tempdir)
+
+    try:
+        r = requests.get(srtm)
+        open(srtm_arc, "wb").write(r.content)
+        with zipfile.ZipFile(srtm_arc, "r") as zf:
+            zf.extractall(path=tempdir)
+    except:
+        st.warning("Error while downloading the srtm tile...")
 
     # Import external plugins
     import_plugins()
