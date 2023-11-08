@@ -309,9 +309,7 @@ def show_epipolar_images(step, pipeline):
     for idx in range(nb_images):
         fig.data[idx].visible = False
     fig.data[0].visible = True
-    fig.update_coloraxes(cmin=cmin,
-                         cmax=cmax,
-                         colorscale="Greys")
+    fig.update_coloraxes(colorscale="Greys")
     fig.update_layout(width=500, height=500,
                       xaxis_visible=False,
                       yaxis_visible=False)
