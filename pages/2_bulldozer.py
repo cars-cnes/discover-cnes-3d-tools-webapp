@@ -1,4 +1,13 @@
+import os
+from glob import glob
+import shutil
+import tempfile
+import numpy as np
 import streamlit as st
+from bulldozer.pipeline.bulldozer_pipeline import dsm_to_dtm
+import rasterio as rio
+import plotly.graph_objects as go
+import plotly.express as px
 
 FAVICON ="https://cnes.fr/sites/all/themes/web3/favicon.ico"
 st.set_page_config(page_title="CNES 3D | Bulldozer, a DTM from DSM extraction tool", page_icon=FAVICON)
@@ -14,4 +23,93 @@ with left:
 with right:
     st.markdown("<h1 style='text-align: center;'>Bulldozer, a DTM from DSM extraction tool</h1>", unsafe_allow_html=True)
 
-st.info("Work in progress...")
+
+st.header("1. Upload the DSM")
+dsm = st.file_uploader("Upload your DSM",
+                       accept_multiple_files=False,
+                       label_visibility="collapsed")
+
+st.header("2. See DSM / DHM / DTM etc.")
+if dsm is not None:
+    dsm_suffix = os.path.splitext(dsm.name)[-1]
+    temp_dir = tempfile.mkdtemp()
+    dsm_path = os.path.join(temp_dir, "DSM."+dsm_suffix)
+    with open(dsm_path, "wb") as f:
+        f.write(dsm.getbuffer())
+
+    params = {"nb_max_workers": 1,
+              "max_object_width": 16,
+              "check_intersection": False,
+              "min_valid_height": 0.0,
+              "no_data": None,
+              "developper_mode": False,
+              "keep_inter_dtm" : False,
+              "slope_threshold" : 2.0,
+              "four_connexity" : True,
+              "uniform_filter_size" : 3,
+              "prevent_unhook_iter" : 10,
+              "num_outer_iter" : 50,
+              "num_inner_iter" : 10,
+              "mp_tile_size" : 1500}
+    try:
+        dsm_to_dtm(dsm_path=dsm_path,
+                   output_dir=temp_dir,
+                   **params)
+
+    except FileNotFoundError:
+        st.rerun()
+        dsm_to_dtm(dsm_path=dsm_path,
+                   output_dir=temp_dir,
+                   **params)
+
+    rasters_list = [dsm_path] + glob(os.path.join(temp_dir, "*.tif"))
+    rasters_list = list(set(rasters_list))
+    fig_list = []
+    for image in rasters_list:
+        with rio.open(image) as src:
+            array = src.read(1).astype(float)
+            array[array==src.nodata] = np.nan
+            array = np.flip(array, 0)
+            fig_data = px.imshow(array).data[0]
+            fig_list.append(fig_data)
+
+    nb_rasters = len(rasters_list)
+    fig = go.Figure(fig_list)
+    for idx in range(nb_rasters):
+        fig.data[idx].visible = False
+    fig.data[0].visible = True
+    fig.update_coloraxes(colorscale="Greys")
+    fig.update_layout(width=500, height=500,
+                      xaxis_visible=False,
+                      yaxis_visible=False)
+    fig.update_yaxes(scaleanchor="x",
+                     scaleratio=1)
+
+    buttons = list()
+    for idx, name in enumerate(rasters_list):
+        visible = [False] * nb_rasters
+        visible[idx] = True
+        button = dict(label=os.path.basename(name),
+                      method="restyle",
+                      args=[{"visible": visible},])
+        buttons.append(button)
+
+    fig.update_layout(
+        updatemenus=[
+            dict(active=0,
+                 buttons=buttons,
+                 x=1.1,
+                 xanchor="left",
+                 y=1.1,
+                 yanchor="top")])
+
+    st.plotly_chart(fig, use_container_width=True)
+
+    for raster in rasters_list:
+        basename = os.path.basename(raster)
+        with open(raster, "rb") as raster_file:
+            st.download_button("Download "+basename,
+                               data=raster_file,
+                               file_name=basename)
+
+    shutil.rmtree(temp_dir, ignore_errors=True)
