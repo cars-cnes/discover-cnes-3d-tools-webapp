@@ -287,21 +287,56 @@ def enhance(array, nodata):
 def show_epipolar_images(step, pipeline):
     outdata = st.session_state[pipeline]
 
-    option = st.selectbox(
-        'Choose image', outdata[step].keys(), key=pipeline+" selectbox")
+    fig_list = []
+    images_name = outdata[step].keys()
+    for name in images_name:
+        __, temp = tempfile.mkstemp(suffix=".tif")
+        carsdata = outdata[step][name]
+        save_data(carsdata["data"], temp,
+                  tag=carsdata["tag"],
+                  nodata=carsdata["nodata"])
 
-    __, temp = tempfile.mkstemp(suffix=".tif")
-    carsdata = outdata[step][option]
-    save_data(carsdata["data"], temp,
-              tag=carsdata["tag"],
-              nodata=carsdata["nodata"])
+        with rio.open(temp) as src:
+            array = src.read(1).astype(float)
+            array[array==src.nodata] = np.nan
+            array = np.flip(array, 0)
+            fig_data = px.imshow(array).data[0]
+            fig_list.append(fig_data)
+        os.remove(temp)
 
-    with rio.open(temp) as src:
-        array = enhance(src.read(1), src.nodata)
+    nb_images = len(images_name)
+    fig = go.Figure(fig_list)
+    for idx in range(nb_images):
+        fig.data[idx].visible = False
+    fig.data[0].visible = True
+    fig.update_coloraxes(cmin=cmin,
+                         cmax=cmax,
+                         colorscale="Greys")
+    fig.update_layout(width=500, height=500,
+                      xaxis_visible=False,
+                      yaxis_visible=False)
+    fig.update_yaxes(scaleanchor="x",
+                     scaleratio=1)
 
-    os.remove(temp)
-    im = Image.fromarray(array)
-    st.image(im.convert("RGB"))
+    buttons = list()
+    for idx, name in enumerate(images_name):
+        visible = [False] * nb_images
+        visible[idx] = True
+        button = dict(label=name,
+                      method="restyle",
+                      args=[{"visible": visible},])
+        buttons.append(button)
+
+    fig.update_layout(
+        updatemenus=[
+            dict(active=0,
+                 buttons=buttons,
+                 x=1.1,
+                 xanchor="left",
+                 y=1.1,
+                 yanchor="top")])
+
+    st.plotly_chart(fig, use_container_width=True)
 
 
 def show_matches(group_size=50):
