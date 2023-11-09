@@ -33,7 +33,7 @@ st.header("2. See DSM / DHM / DTM etc.")
 if dsm is not None:
     dsm_suffix = os.path.splitext(dsm.name)[-1]
     temp_dir = tempfile.mkdtemp()
-    dsm_path = os.path.join(temp_dir, "DSM."+dsm_suffix)
+    dsm_path = os.path.join(temp_dir, "DSM"+dsm_suffix)
     with open(dsm_path, "wb") as f:
         f.write(dsm.getbuffer())
 
@@ -62,8 +62,20 @@ if dsm is not None:
                    output_dir=temp_dir,
                    **params)
 
-    rasters_list = [dsm_path] + glob(os.path.join(temp_dir, "*.tif"))
+    st.info("Bulldozer has successfully completed the pipeline")
+    rasters_list = [dsm_path] + glob(os.path.join(temp_dir, "D*.tif"))
     rasters_list = list(set(rasters_list))
+    left, right = st.columns((3, 1))
+    with left:
+        st.image("https://raw.githubusercontent.com/cars-cnes/discover-cnes-3d-tools/gh-pages/images/dsm_dtm_dhm_illustration.png")
+    with right:
+        for raster in rasters_list:
+            basename = os.path.basename(raster)
+            with open(raster, "rb") as raster_file:
+                st.download_button("Download "+basename,
+                                   data=raster_file,
+                                   file_name=basename)
+
     fig_list = []
     for image in rasters_list:
         with rio.open(image) as src:
@@ -104,12 +116,4 @@ if dsm is not None:
                  yanchor="top")])
 
     st.plotly_chart(fig, use_container_width=True)
-
-    for raster in rasters_list:
-        basename = os.path.basename(raster)
-        with open(raster, "rb") as raster_file:
-            st.download_button("Download "+basename,
-                               data=raster_file,
-                               file_name=basename)
-
     shutil.rmtree(temp_dir, ignore_errors=True)

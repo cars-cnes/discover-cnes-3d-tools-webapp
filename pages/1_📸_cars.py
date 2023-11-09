@@ -218,6 +218,8 @@ if st.button("Run CARS"):
         if None not in [envelope_and_center1, envelope_and_center2]:
             try:
                 st.session_state["sparse"], st.session_state["dense"] = cars_steps.run(image1, image2, geomodel1, geomodel2)
+                st.info("CARS has successfully completed the pipeline(s)")
+
             except Exception as e:
                 st.error("CARS encountered a problem during execution")
                 st.error(e)
