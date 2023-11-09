@@ -542,38 +542,39 @@ steps = ["resampling", "matching", "triangulation", "rasterization"]
 
 st.header("3. See intermediate results")
 
-st.subheader("Select the sparse pipeline step 👇")
+col1, col2 = st.columns(2)
 
-sparse_step = st.radio(
-    "Select the sparse pipeline step 👇",
-    steps, horizontal=True,
-    label_visibility="collapsed"
-)
+with col1:
+    st.subheader("Select the pipeline 👇")
+    pipeline = st.radio(
+        "Select the pipeline 👇",
+        ["sparse", "dense"],
+        label_visibility="collapsed"
+    )
 
-if "sparse" in st.session_state:
-    if sparse_step == "resampling":
-        show_epipolar_images("resampling", "sparse")
-    elif sparse_step == "matching":
+with col2:
+    st.subheader("Select the step 👇")
+
+    step = st.radio(
+        "Select the step 👇",
+        steps, horizontal=True,
+        label_visibility="collapsed"
+    )
+
+if pipeline == "sparse" and "sparse" in st.session_state:
+    if step == "resampling":
+        show_epipolar_images(step, pipeline)
+    elif step == "matching":
         show_matches()
-    elif sparse_step == "triangulation":
+    elif step == "triangulation":
         show_points_cloud()
     else:
-        show_rasterization("sparse")
-else:
-    st.warning("Click on \"Run CARS\" before", icon="⚠️")
+        show_rasterization(pipeline)
 
-st.subheader("Select the dense pipeline step 👇")
-
-dense_step = st.radio(
-    "Select the dense pipeline step 👇",
-    steps, horizontal=True,
-    label_visibility="collapsed"
-)
-
-if "dense" in st.session_state:
-    if dense_step in ["resampling", "triangulation", "matching"]:
-        show_epipolar_images(dense_step, "dense")
+elif pipeline == "dense" and "dense" in st.session_state:
+    if step in ["resampling", "triangulation", "matching"]:
+        show_epipolar_images(step, pipeline)
     else:
-        show_rasterization("dense")
+        show_rasterization(pipeline)
 else:
     st.warning("Click on \"Run CARS\" before", icon="⚠️")
