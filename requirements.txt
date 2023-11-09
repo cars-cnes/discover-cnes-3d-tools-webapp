@@ -1,7 +1,7 @@
 streamlit
 shareloc
 streamlit-folium
-folium
+folium!=0.15.0
 cars
 plotly
 bulldozer-dtm

@@ -172,7 +172,10 @@ def show_images():
         folium.LayerControl().add_to(m)
         st_folium(m, height=500, width=500)
 
-if None not in [image1, image2, geomodel1, geomodel2]:
+st.header("2. Check the footprints")
+
+show_the_map = st.checkbox('Show the map')
+if show_the_map and None not in [image1, image2, geomodel1, geomodel2]:
     show_images()
 
 def save_data(cars_ds,
@@ -206,7 +209,7 @@ def save_data(cars_ds,
     # close descriptor
     desc.close()
 
-st.header("2. Launch CARS")
+st.header("3. Launch CARS")
 # run cars
 if st.button("Run CARS"):
     if None not in [image1, image2, geomodel1, geomodel2]:
@@ -540,7 +543,7 @@ def show_rasterization(pipeline):
 
 steps = ["resampling", "matching", "triangulation", "rasterization"]
 
-st.header("3. See intermediate results")
+st.header("4. See intermediate results")
 
 col1, col2 = st.columns(2)
 
