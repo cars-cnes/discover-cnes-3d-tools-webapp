@@ -200,7 +200,6 @@ if st.button("Run CARS"):
 if "dense" in st.session_state:
     __, temp1 = tempfile.mkstemp(suffix=".tif")
     dsm_data = st.session_state["dense"]["rasterization"]["dsm"]
-    print(dsm_data)
 
     array = dsm_data["array"]
     profile = dsm_data["profile"]
@@ -284,7 +283,7 @@ def show_epipolar_images(step, pipeline):
     for idx in range(nb_images):
         fig.data[idx].visible = False
     fig.data[0].visible = True
-    fig.update_coloraxes(colorscale="Greys")
+    fig.update_coloraxes(colorscale="gray")
     fig.update_layout(width=500, height=500,
                       xaxis_visible=False,
                       yaxis_visible=False)
