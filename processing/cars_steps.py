@@ -1,6 +1,9 @@
 import os
+import json
 import numpy as np
+import pandas as pd
 import rasterio as rio
+from glob import glob
 
 from cars import __version__
 from cars import import_plugins
@@ -12,6 +15,8 @@ from cars.applications.sparse_matching import sparse_matching_tools
 from cars.applications.dem_generation import dem_generation_tools
 from cars.core import preprocessing
 import cars.pipelines.sensor_to_dense_dsm.sensor_dense_dsm_constants as sens_cst
+
+from cars.pipelines.pipeline import Pipeline
 
 from shareloc.geomodels.rpc import RPC
 from shareloc.image import Image as sImage
@@ -108,209 +113,75 @@ def run(image1, image2, geomodel1, geomodel2):
     if os.path.exists(srtm_tif):
         inputs_conf["initial_elevation"] = srtm_tif
 
-    inputs = sensors_inputs.sensors_check_inputs(inputs_conf)
+    config = {}
+    config["inputs"] = inputs_conf
+    config["output"] = {"out_dir": tempdir}
 
-    # Get geometry plugin
-    (_, _, geom_plugin_without_dem_and_geoid, geom_plugin_with_dem_and_geoid) = \
-        sensors_inputs.check_geometry_plugin(inputs, None)
+    config["orchestrator"] = {"mode": "mp", "nb_workers": 1}
+    config["applications"] = {"resampling": {"save_epipolar_image": True},
+                              "sparse_matching": {"save_matches": True},
+                              "dense_matching": {"save_disparity_map": True},
+                              "point_cloud_fusion": {"save_points_cloud_as_csv": True},
+                              "triangulation": {"save_points_cloud": True}}
 
-    epipolar_grid_generation_application = Application("grid_generation")
-    resampling_application = Application("resampling")
-    sparse_matching_application = Application("sparse_matching")
-    dem_generation_application = Application("dem_generation", cfg={"margin": 90})
-    dense_matching_application = Application("dense_matching")
-    triangulation_application = Application("triangulation")
-    pc_fusion_application = Application("point_cloud_fusion")
-    rasterization_application = Application("point_cloud_rasterization")
+    my_bar.progress(10, text="Sparse pipeline: resampling, sparse matching, triangulation, rasterization...")
+    sparse_pipeline = Pipeline("sensors_to_sparse_dsm", config, os.getcwd())
+    sparse_pipeline.run()
 
-    # Use sequential mode in notebook
-    orchestrator_conf = {"mode": "sequential"}
-    cars_orchestrator = orchestrator.Orchestrator(orchestrator_conf=orchestrator_conf,
-                                                  out_dir=tempdir)
-    _, sensor_image_left, sensor_image_right = \
-        sensors_inputs.generate_inputs(inputs,
-                                       geom_plugin_without_dem_and_geoid)[0]
-    geom_plugin = geom_plugin_with_dem_and_geoid
+    def fill_outdata(outdata):
+        for step in outdata.keys():
+            keys_list = outdata[step].keys()
+            for key in keys_list:
+                outdata_list = list()
+                filenames = glob(outdata[step][key])
+                for filename in filenames:
+                    basename = os.path.basename(filename)
+                    ext = os.path.splitext(filename)[-1]
+                    if ext == ".tif":
+                        with rio.open(filename) as dt:
+                            outdata_list.append({"array": dt.read(),
+                                            "profile": dt.profile})
+                    elif ext == ".npy":
+                        outdata_list.append(np.load(filename))
+                    elif ext == ".csv":
+                        outdata_list.append(pd.read_csv(filename, delimiter=','))
 
-    if inputs["initial_elevation"] is None:
-        geom_plugin = geom_plugin_without_dem_and_geoid
+                if len(outdata_list) == 1:
+                    outdata[step][key] = outdata_list[0]
+                else:
+                    outdata[step][key] = pd.concat(outdata_list)
 
-    my_bar.progress(5, text="Sparse pipeline: resampling")
-    grid_left, grid_right = epipolar_grid_generation_application.run(
-        sensor_image_left,
-        sensor_image_right,
-        geom_plugin,
-        orchestrator=cars_orchestrator
-    )
+    pairdir = os.path.join(tempdir, "_".join(config["inputs"]["pairing"][0]))
 
-    epipolar_image_left, epipolar_image_right = resampling_application.run(
-        sensor_image_left,
-        sensor_image_right,
-        grid_left,
-        grid_right,
-        orchestrator=cars_orchestrator,
-        margins=sparse_matching_application.get_margins()
-    )
+    sparse_outdata = {"resampling": {"left": os.path.join(pairdir, "epi_img_left.tif"),
+                                     "right": os.path.join(pairdir, "epi_img_right.tif")},
+                      "matching": {"disp": os.path.join(pairdir, "filtered_matches.npy")},
+                      "triangulation": {"pc": os.path.join(pairdir, "epi_pc", "*.csv")},
+                      "rasterization": {"dsm": os.path.join(tempdir, "dsm.tif")}}
 
-    sparse_outdata["resampling"] = {"left": {"data": epipolar_image_left, "tag": "im", "nodata": 0}, "right": {"data": epipolar_image_right, "tag": "im", "nodata": 0}}
+    with open(os.path.join(tempdir, "refined_config_dense_dsm.json"), "r") as json_reader:
+        config_new = json.load(json_reader)
 
-    my_bar.progress(10, text="Sparse pipeline: matching")
-    epipolar_matches_left, _ = sparse_matching_application.run(
-        epipolar_image_left,
-        epipolar_image_right,
-        grid_left.attributes["disp_to_alt_ratio"],
-        orchestrator=cars_orchestrator
-    )
+    fill_outdata(sparse_outdata)
 
-    matches_array = sparse_matching_application.filter_matches(epipolar_matches_left,
-                                                               orchestrator=cars_orchestrator)
+    config_new["applications"] = config["applications"]
 
-    sparse_outdata["matching"] = matches_array
+    dense_outdata = {"resampling": {"left": os.path.join(pairdir, "epi_img_left.tif"),
+                                    "right": os.path.join(pairdir, "epi_img_right.tif")},
+                     "matching": {"disp": os.path.join(pairdir, "epi_disp.tif")},
+                     "triangulation":{"x": os.path.join(pairdir, "epi_pc_X.tif"),
+                                      "y": os.path.join(pairdir, "epi_pc_X.tif"),
+                                      "z": os.path.join(pairdir, "epi_pc_Z.tif"),
+                                      "pc": os.path.join(tempdir, "points_cloud/*.csv")},
+                     "rasterization": {"dsm": os.path.join(tempdir, "dsm.tif"),
+                                       "clr": os.path.join(tempdir, "clr.tif")}}
 
-    grid_correction_coef, corrected_matches_array, _, _, _ = \
-        grid_correction.estimate_right_grid_correction(matches_array, grid_right)
+    my_bar.progress(30, text="Dense pipeline: resampling, dense matching, triangulation, rasterization...")
+    dense_pipeline = Pipeline("sensors_to_dense_dsm", config_new, os.getcwd())
+    dense_pipeline.run()
+    my_bar.progress(100, text="Pipelines completed")
 
-    corrected_grid_right = grid_correction.correct_grid(grid_right,
-                                                        grid_correction_coef,
-                                                        False,
-                                                        tempdir)
-
-    my_bar.progress(15, text="Sparse pipeline: triangulation")
-    triangulated_matches = dem_generation_tools.triangulate_sparse_matches(
-        sensor_image_left,
-        sensor_image_right,
-        grid_left,
-        corrected_grid_right,
-        corrected_matches_array,
-        geometry_plugin=geom_plugin,
-    )
-
-    sparse_outdata["triangulation"] = triangulated_matches
-
-    dem = dem_generation_application.run(
-        [triangulated_matches],
-        tempdir
-    )
-
-    with open(dem.attributes["dem_mean_path"], 'rb') as demfile:
-        dem_data = demfile.read()
-
-    sparse_outdata["rasterization"] = dem_data
-
-    dmin, dmax = sparse_matching_tools.compute_disp_min_disp_max(
-        triangulated_matches,
-        cars_orchestrator,
-        disp_margin=(
-            sparse_matching_application.get_disparity_margin()
-        ),
-        disp_to_alt_ratio=grid_left.attributes["disp_to_alt_ratio"]
-    )
-    my_bar.progress(20, text="Dense pipeline: resampling")
-    dense_matching_margins, disp_min, disp_max = dense_matching_application.get_margins(
-        grid_left, disp_min=dmin, disp_max=dmax)
-
-    new_epipolar_image_left, new_epipolar_image_right = resampling_application.run(
-        sensor_image_left,
-        sensor_image_right,
-        grid_left,
-        corrected_grid_right,
-        orchestrator=cars_orchestrator,
-        margins=dense_matching_margins,
-        optimum_tile_size=(
-            dense_matching_application.get_optimal_tile_size(
-                disp_min,
-                disp_max,
-                cars_orchestrator.cluster.checked_conf_cluster[
-                    "max_ram_per_worker"
-                ],
-            )
-        ),
-        add_color=True,
-    )
-
-    dense_outdata["resampling"] = {"left": {"data": new_epipolar_image_left, "tag": "im", "nodata": 0}, "right": {"data": new_epipolar_image_right, "tag": "im", "nodata": 0}}
-
-    my_bar.progress(30, text="Dense pipeline: matching")
-    epipolar_disparity_map = dense_matching_application.run(
-        new_epipolar_image_left,
-        new_epipolar_image_right,
-        orchestrator=cars_orchestrator,
-        disp_min=disp_min,
-        disp_max=disp_max,
-    )
-
-    dense_outdata["matching"] = {"disp": {"data": epipolar_disparity_map, "tag": "disp", "nodata": 0}}
-
-    epsg = preprocessing.compute_epsg(
-        sensor_image_left,
-        sensor_image_right,
-        grid_left,
-        corrected_grid_right,
-        geom_plugin_with_dem_and_geoid,
-        orchestrator=cars_orchestrator,
-        disp_min=disp_min,
-        disp_max=disp_max
-    )
-
-    my_bar.progress(80, text="Dense pipeline: triangulation")
-    epipolar_points_cloud = triangulation_application.run(
-        sensor_image_left,
-        sensor_image_right,
-        new_epipolar_image_left,
-        grid_left,
-        corrected_grid_right,
-        epipolar_disparity_map,
-        epsg,
-        geom_plugin_without_dem_and_geoid,
-        orchestrator=cars_orchestrator,
-        uncorrected_grid_right=grid_right,
-        geoid_path=inputs[sens_cst.GEOID],
-        disp_min=disp_min,
-        disp_max=disp_max,
-    )
-
-    dense_outdata["triangulation"] = {"x": {"data": epipolar_points_cloud, "tag": "x", "nodata": np.nan}, "y": {"data": epipolar_points_cloud, "tag": "y", "nodata": np.nan}, "z": {"data": epipolar_points_cloud, "tag": "z", "nodata": np.nan}}
-
-    current_terrain_roi_bbox = preprocessing.compute_terrain_bbox(
-        sensor_image_left,
-        sensor_image_right,
-        new_epipolar_image_left,
-        grid_left,
-        corrected_grid_right,
-        epsg,
-        geom_plugin_with_dem_and_geoid,
-        resolution=rasterization_application.get_resolution(),
-        disp_min=disp_min,
-        disp_max=disp_max,
-        orchestrator=cars_orchestrator
-    )
-    terrain_bounds, optimal_terrain_tile_width = preprocessing.compute_terrain_bounds(
-        [current_terrain_roi_bbox],
-        resolution=rasterization_application.get_resolution()
-    )
-
-    merged_points_clouds = pc_fusion_application.run(
-        [epipolar_points_cloud],
-        terrain_bounds,
-        epsg,
-        orchestrator=cars_orchestrator,
-        margins=rasterization_application.get_margins(),
-        optimal_terrain_tile_width=optimal_terrain_tile_width
-    )
-
-    dense_outdata["triangulation.pc"] = merged_points_clouds[0][0]
-
-    my_bar.progress(95, text="Dense pipeline: rasterization")
-    dsm = rasterization_application.run(
-        merged_points_clouds,
-        epsg,
-        orchestrator=cars_orchestrator
-    )
-
-    dense_outdata["rasterization"] = dsm
-
-    shutil.rmtree(tempdir, ignore_errors=True)
-    my_bar.empty()
+    fill_outdata(dense_outdata)
 
     remove_temp_data(image1, temp_image1)
     remove_temp_data(image2, temp_image2)

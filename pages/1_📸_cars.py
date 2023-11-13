@@ -178,37 +178,6 @@ show_the_map = st.checkbox('Show the map')
 if show_the_map and None not in [image1, image2, geomodel1, geomodel2]:
     show_images()
 
-def save_data(cars_ds,
-              file_name,
-              tag,
-              dtype="float32",
-              nodata=-9999):
-
-    # create descriptor
-    desc = None
-
-    # Save tiles
-    for row in range(cars_ds.shape[0]):
-        for col in range(cars_ds.shape[1]):
-            if cars_ds[row, col] is not None:
-                if desc is None:
-                    desc = cars_ds.generate_descriptor(
-                        cars_ds[row, col],
-                        file_name,
-                        tag=tag,
-                        dtype=dtype,
-                        nodata=nodata,
-                    )
-                cars_ds.run_save(
-                    cars_ds[row, col],
-                    file_name,
-                    tag=tag,
-                    descriptor=desc,
-                )
-
-    # close descriptor
-    desc.close()
-
 st.header("3. Launch CARS")
 # run cars
 if st.button("Run CARS"):
@@ -217,7 +186,8 @@ if st.button("Run CARS"):
         envelope_and_center2 = get_envelope_and_center(image2, geomodel2)
         if None not in [envelope_and_center1, envelope_and_center2]:
             try:
-                st.session_state["sparse"], st.session_state["dense"] = cars_steps.run(image1, image2, geomodel1, geomodel2)
+                sparse, dense = cars_steps.run(image1, image2, geomodel1, geomodel2)
+                st.session_state["sparse"], st.session_state["dense"] = sparse, dense
                 st.info("CARS has successfully completed the pipeline(s)")
 
             except Exception as e:
@@ -229,8 +199,15 @@ if st.button("Run CARS"):
 
 if "dense" in st.session_state:
     __, temp1 = tempfile.mkstemp(suffix=".tif")
-    dsm_data = st.session_state["dense"]["rasterization"]
-    save_data(dsm_data, temp1, tag="hgt", nodata=-32768)
+    dsm_data = st.session_state["dense"]["rasterization"]["dsm"]
+    print(dsm_data)
+
+    array = dsm_data["array"]
+    profile = dsm_data["profile"]
+
+    with rio.open(temp1, "w", **profile) as dt:
+        dt.write(array)
+
     with open(temp1, "rb") as dsm_file:
         st.download_button("Download DSM",
                            data=dsm_file,
@@ -243,7 +220,7 @@ if "dense" in st.session_state:
     header.scales = [scale_factor, scale_factor, scale_factor]
     laz = laspy.LasData(header)
 
-    pc = st.session_state["dense"]["triangulation.pc"]
+    pc = st.session_state["dense"]["triangulation"]["pc"]
 
     # positions
     laz.x = pc.x
@@ -293,21 +270,14 @@ def show_epipolar_images(step, pipeline):
     outdata = st.session_state[pipeline]
 
     fig_list = []
-    images_name = outdata[step].keys()
-    for name in images_name:
-        __, temp = tempfile.mkstemp(suffix=".tif")
-        carsdata = outdata[step][name]
-        save_data(carsdata["data"], temp,
-                  tag=carsdata["tag"],
-                  nodata=carsdata["nodata"])
+    images_name = [key for key in outdata[step].keys() \
+                   if "array" in outdata[step][key]]
 
-        with rio.open(temp) as src:
-            array = src.read(1).astype(float)
-            array[array==src.nodata] = np.nan
-            array = np.flip(array, 0)
-            fig_data = px.imshow(array).data[0]
-            fig_list.append(fig_data)
-        os.remove(temp)
+    for name in images_name:
+        array = np.squeeze(outdata[step][name]["array"])
+        array = np.flip(array, 0)
+        fig_data = px.imshow(array).data[0]
+        fig_list.append(fig_data)
 
     nb_images = len(images_name)
     fig = go.Figure(fig_list)
@@ -343,32 +313,17 @@ def show_epipolar_images(step, pipeline):
 
 
 def show_matches(group_size=50):
-    outdata = st.session_state["sparse"]
-    arrays = {}
-    for key in outdata["resampling"].keys():
-        __, temp = tempfile.mkstemp(suffix=".tif")
-        carsdata = outdata["resampling"][key]
-        save_data(carsdata["data"], temp,
-                  tag=carsdata["tag"],
-                  nodata=carsdata["nodata"])
-
-        with rio.open(temp) as src:
-            arrays[key] = np.moveaxis(src.read(), 0, -1)
-            arrays[key] = enhance(arrays[key], src.nodata)
-            arrays[key] = np.dstack((arrays[key],
-                                     arrays[key],
-                                     arrays[key]))
-
-        os.remove(temp)
-
-    matches_array = outdata["matching"]
+    left = st.session_state["sparse"]["resampling"]["left"]["array"]
+    left = np.squeeze(left)
+    right = st.session_state["sparse"]["resampling"]["right"]["array"]
+    right = np.squeeze(right)
+    matches_array = st.session_state["sparse"]["matching"]["disp"]
 
     # Create figure
     fig = go.Figure()
-    left_right = np.hstack((arrays["left"], arrays["right"]))
+    left_right = np.hstack((left, right))
     fig = px.imshow(left_right, color_continuous_scale='gray')
 
-    # matches_array = np.load("matches.npy")
     nb_matches = len(matches_array[:, 0])
     text = list(map(lambda x: "idx: "+str(x), range(nb_matches)))
 
@@ -381,7 +336,7 @@ def show_matches(group_size=50):
         )
 
     fig.add_trace(
-        go.Scatter(x=matches_array[:, 2] + arrays["left"].shape[1],
+        go.Scatter(x=matches_array[:, 2] + left.shape[1],
                    y=matches_array[:, 3],
                    text=text,
                    mode='markers',
@@ -400,7 +355,7 @@ def show_matches(group_size=50):
             go.Scatter(
                 visible=False,
                 x=[matches_array[idx, 0],
-                   matches_array[idx, 2] + arrays["left"].shape[1]],
+                   matches_array[idx, 2] + left.shape[1]],
                 y=[matches_array[idx, 1],
                    matches_array[idx, 3]],
                 legendgroup='it\'s a match',
@@ -444,18 +399,15 @@ def show_matches(group_size=50):
 
     st.plotly_chart(fig, use_container_width=True)
 
-def get_wgs84_dsm_file_from_carsdata(carsdata, pipeline):
+def get_wgs84_dsm_file_from_carsdata(dsm):
     __, temp1 = tempfile.mkstemp(suffix=".tif")
     __, temp2 = tempfile.mkstemp(suffix=".tif")
 
-    if pipeline == "dense":
-        save_data(carsdata,
-                  temp1,
-                  tag="hgt",
-                  nodata=-32768)
-    else:
-        with open(temp1, "wb") as demfile:
-            demfile.write(carsdata)
+    array = dsm["array"]
+    profile = dsm["profile"]
+
+    with rio.open(temp1, "w", **profile) as dst:
+        dst.write(array)
 
     dst_crs = 'EPSG:4326'
     with rio.open(temp1) as src:
@@ -506,11 +458,11 @@ def show_points_cloud():
 
 
 def show_rasterization(pipeline):
-    dsm = st.session_state[pipeline]["rasterization"]
+    dsm = st.session_state[pipeline]["rasterization"]["dsm"]
     m = create_map_drawing_envelopes(show=False)
 
     if m is not None:
-        temp = get_wgs84_dsm_file_from_carsdata(dsm, pipeline)
+        temp = get_wgs84_dsm_file_from_carsdata(dsm)
 
         with rio.open(temp) as src:
             array = np.moveaxis(src.read(), 0, -1)
