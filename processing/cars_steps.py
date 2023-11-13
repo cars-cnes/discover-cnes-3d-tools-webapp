@@ -29,6 +29,9 @@ import streamlit as st
 import requests
 import zipfile
 
+import logging
+logging.getLogger().setLevel(logging.INFO)
+
 # download srtm
 def get_srtm_tif_name(lat, lon):
     """Download srtm tiles"""
