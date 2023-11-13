@@ -435,7 +435,7 @@ def get_wgs84_dsm_file_from_carsdata(dsm):
     return temp2
 
 def show_points_cloud():
-    pc = st.session_state["sparse"]["triangulation"]
+    pc = st.session_state["sparse"]["triangulation"]["pc"]
 
     pc_valid = pc[(pc["z"] < pc["z"].quantile(.99)) & \
                   (pc["z"] > pc["z"].quantile(.01))]
