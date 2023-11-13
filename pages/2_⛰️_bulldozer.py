@@ -29,55 +29,71 @@ dsm = st.file_uploader("Upload your DSM",
                        accept_multiple_files=False,
                        label_visibility="collapsed")
 
-st.header("2. See DSM / DHM / DTM etc.")
-if dsm is not None:
-    dsm_suffix = os.path.splitext(dsm.name)[-1]
+st.header("2. Launch Bulldozer")
+if st.button("Run Bulldozer"):
+    if dsm is not None:
+        dsm_suffix = os.path.splitext(dsm.name)[-1]
+        temp_dir = tempfile.mkdtemp()
+        dsm_path = os.path.join(temp_dir, "DSM"+dsm_suffix)
+        with open(dsm_path, "wb") as f:
+            f.write(dsm.getbuffer())
+
+        params = {"nb_max_workers": 1,
+                  "max_object_width": 16,
+                  "check_intersection": False,
+                  "min_valid_height": 0.0,
+                  "no_data": None,
+                  "developper_mode": False,
+                  "keep_inter_dtm" : False,
+                  "slope_threshold" : 2.0,
+                  "four_connexity" : True,
+                  "uniform_filter_size" : 3,
+                  "prevent_unhook_iter" : 10,
+                  "num_outer_iter" : 50,
+                  "num_inner_iter" : 10,
+                  "mp_tile_size" : 1500}
+        try:
+            dsm_to_dtm(dsm_path=dsm_path,
+                       output_dir=temp_dir,
+                       **params)
+
+        except FileNotFoundError:
+            st.rerun()
+            dsm_to_dtm(dsm_path=dsm_path,
+                       output_dir=temp_dir,
+                       **params)
+
+        st.info("Bulldozer has successfully completed the pipeline")
+
+        rasters_list = [dsm_path] + glob(os.path.join(temp_dir, "D*.tif"))
+        rasters_list = list(set(rasters_list))
+
+        st.session_state["bulldozer"] = dict()
+        for raster in rasters_list:
+            with open(raster, "rb") as reader:
+                st.session_state["bulldozer"][os.path.basename(raster)] = reader.read()
+
+        shutil.rmtree(temp_dir, ignore_errors=True)
+
+st.header("3. See DSM / DHM / DTM etc.")
+if "bulldozer" in st.session_state:
     temp_dir = tempfile.mkdtemp()
-    dsm_path = os.path.join(temp_dir, "DSM"+dsm_suffix)
-    with open(dsm_path, "wb") as f:
-        f.write(dsm.getbuffer())
-
-    params = {"nb_max_workers": 1,
-              "max_object_width": 16,
-              "check_intersection": False,
-              "min_valid_height": 0.0,
-              "no_data": None,
-              "developper_mode": False,
-              "keep_inter_dtm" : False,
-              "slope_threshold" : 2.0,
-              "four_connexity" : True,
-              "uniform_filter_size" : 3,
-              "prevent_unhook_iter" : 10,
-              "num_outer_iter" : 50,
-              "num_inner_iter" : 10,
-              "mp_tile_size" : 1500}
-    try:
-        dsm_to_dtm(dsm_path=dsm_path,
-                   output_dir=temp_dir,
-                   **params)
-
-    except FileNotFoundError:
-        st.rerun()
-        dsm_to_dtm(dsm_path=dsm_path,
-                   output_dir=temp_dir,
-                   **params)
-
-    st.info("Bulldozer has successfully completed the pipeline")
-    rasters_list = [dsm_path] + glob(os.path.join(temp_dir, "D*.tif"))
-    rasters_list = list(set(rasters_list))
     left, right = st.columns((3, 1))
+    rasters_list = st.session_state["bulldozer"].keys()
+
     with left:
         st.image("https://raw.githubusercontent.com/cars-cnes/discover-cnes-3d-tools/gh-pages/images/dsm_dtm_dhm_illustration.png")
     with right:
         for raster in rasters_list:
-            basename = os.path.basename(raster)
-            with open(raster, "rb") as raster_file:
-                st.download_button("Download "+basename,
-                                   data=raster_file,
-                                   file_name=basename)
+            st.download_button("Download "+raster,
+                               data=st.session_state["bulldozer"][raster],
+                               file_name=raster)
 
     fig_list = []
-    for image in rasters_list:
+    for raster in rasters_list:
+        image = os.path.join(temp_dir, raster)
+        with open(image, "wb") as writer:
+            writer.write(st.session_state["bulldozer"][raster])
         with rio.open(image) as src:
             array = src.read(1).astype(float)
             array[array==src.nodata] = np.nan
