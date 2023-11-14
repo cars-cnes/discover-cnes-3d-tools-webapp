@@ -29,9 +29,6 @@ import streamlit as st
 import requests
 import zipfile
 
-import logging
-logging.getLogger().setLevel(logging.INFO)
-
 # download srtm
 def get_srtm_tif_name(lat, lon):
     """Download srtm tiles"""
@@ -60,6 +57,21 @@ def get_temp_data(data):
 def remove_temp_data(data, temp_data):
     if isinstance(data, str) is False:
         os.remove(temp_data)
+
+from io import StringIO
+from contextlib import contextmanager, redirect_stdout
+@contextmanager
+def st_capture(output_func):
+    with StringIO() as stdout, redirect_stdout(stdout):
+        old_write = stdout.write
+
+        def new_write(string):
+            ret = old_write(string)
+            output_func(stdout.getvalue())
+            return ret
+
+        stdout.write = new_write
+        yield
 
 def run(image1, image2, geomodel1, geomodel2):
     temp_image1 = get_temp_data(image1)
@@ -128,8 +140,11 @@ def run(image1, image2, geomodel1, geomodel2):
                               "triangulation": {"save_points_cloud": True}}
 
     my_bar.progress(10, text="Sparse pipeline: resampling, sparse matching, triangulation, rasterization...")
-    sparse_pipeline = Pipeline("sensors_to_sparse_dsm", config, os.getcwd())
-    sparse_pipeline.run()
+
+    output = st.empty()
+    with st_capture(output.code):
+        sparse_pipeline = Pipeline("sensors_to_sparse_dsm", config, os.getcwd())
+        sparse_pipeline.run()
 
     def fill_outdata(outdata):
         for step in outdata.keys():
@@ -180,8 +195,10 @@ def run(image1, image2, geomodel1, geomodel2):
                                        "clr": os.path.join(tempdir, "clr.tif")}}
 
     my_bar.progress(30, text="Dense pipeline: resampling, dense matching, triangulation, rasterization...")
-    dense_pipeline = Pipeline("sensors_to_dense_dsm", config_new, os.getcwd())
-    dense_pipeline.run()
+    output = st.empty()
+    with st_capture(output.code):
+        dense_pipeline = Pipeline("sensors_to_dense_dsm", config_new, os.getcwd())
+        dense_pipeline.run()
     my_bar.progress(100, text="Pipelines completed")
 
     fill_outdata(dense_outdata)
