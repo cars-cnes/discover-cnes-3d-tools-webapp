@@ -1,13 +1,11 @@
 import os
 import streamlit as st
-from PIL import Image, ImageMath, ImageStat
-from io import StringIO
 import numpy as np
 import rasterio as rio
 import time
 
 from shareloc.geomodels.rpc import RPC
-from shareloc.image import Image as sImage
+from shareloc.image import Image
 from shareloc.geofunctions import localization
 
 import folium
@@ -102,7 +100,7 @@ def get_envelope_and_center(image, geomodel):
 
     # read image
     try:
-        shareloc_img = sImage(temp_image)
+        shareloc_img = Image(temp_image)
     except rio.errors.RasterioIOError:
         st.warning(image.name + " is not a correct image", icon="⚠️")
         if isinstance(image, str) is False:
