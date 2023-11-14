@@ -27,14 +27,14 @@ with right:
 st.header("1. Upload the DSM")
 dsm = st.file_uploader("Upload your DSM",
                        accept_multiple_files=False,
-                       label_visibility="collapsed")
+                       label_visibility="collapsed",
+                       type=["tif"])
 
 st.header("2. Launch Bulldozer")
 if st.button("Run Bulldozer"):
     if dsm is not None:
-        dsm_suffix = os.path.splitext(dsm.name)[-1]
         temp_dir = tempfile.mkdtemp()
-        dsm_path = os.path.join(temp_dir, "DSM"+dsm_suffix)
+        dsm_path = os.path.join(temp_dir, "DSM.tif")
         with open(dsm_path, "wb") as f:
             f.write(dsm.getbuffer())
 
@@ -65,8 +65,7 @@ if st.button("Run Bulldozer"):
 
         st.info("Bulldozer has successfully completed the pipeline")
 
-        rasters_list = [dsm_path] + glob(os.path.join(temp_dir, "D*.tif"))
-        rasters_list = list(set(rasters_list))
+        rasters_list = glob(os.path.join(temp_dir, "D*.tif"))
 
         st.session_state["bulldozer"] = dict()
         for raster in rasters_list:
@@ -74,6 +73,9 @@ if st.button("Run Bulldozer"):
                 st.session_state["bulldozer"][os.path.basename(raster)] = reader.read()
 
         shutil.rmtree(temp_dir, ignore_errors=True)
+
+    else:
+        st.warning("Download your DSM before", icon="⚠️")
 
 st.header("3. See DSM / DHM / DTM etc.")
 if "bulldozer" in st.session_state:
