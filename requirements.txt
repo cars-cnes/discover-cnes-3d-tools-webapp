@@ -5,4 +5,4 @@ folium!=0.15.0
 cars
 plotly
 bulldozer-dtm
-demcompare
+demcompare<0.6.0
